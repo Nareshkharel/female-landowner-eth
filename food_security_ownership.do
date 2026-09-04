@@ -47,6 +47,10 @@ if `"$ownership_dta"' != "" {
 *------------------------------------------------------------------------------
 * Design identifiers
 *------------------------------------------------------------------------------
+* Dropped first so the file can be re-run, or run block by block, without
+* tripping "already defined".
+capture drop kebele psu fies_dummy severe_fi
+
 egen kebele = group(saq01 saq02 saq03 saq04 saq05 saq06)
 label var kebele "kebele (from geographic codes; saq06 alone is not unique)"
 
@@ -58,16 +62,16 @@ else {
     gen psu = kebele
 }
 
-local wt ""
+global wt ""
 foreach v in svwt pw_w5 {
     capture confirm numeric variable `v'
-    if !_rc & "`wt'" == "" local wt `v'
+    if !_rc & "$wt" == "" global wt `v'
 }
-if "`wt'" == "" {
+if "$wt" == "" {
     display as error "no survey weight (svwt or pw_w5) found"
     exit 111
 }
-display as text "weight = `wt'"
+display as text "weight = $wt"
 
 
 *------------------------------------------------------------------------------
@@ -101,12 +105,12 @@ label var severe_fi  "1 = severe FI (FIES > 6)"
 
 * sfi and soil_fertility come from the post-planting files and are absent from
 * fies_household.dta, so controls are assembled from what the data holds.
-local x ""
+global x ""
 foreach v in sfi age basic_educ male_head dependency_ratio non_farm_enterprise ///
              wealth_index dist_admhq dist_road soil_fertility drought_shock {
     capture confirm numeric variable `v'
     if !_rc {
-        local x `x' `v'
+        global x $x `v'
     }
     else {
         display as text "note: control `v' not in data, omitted"
@@ -114,24 +118,25 @@ foreach v in sfi age basic_educ male_head dependency_ratio non_farm_enterprise /
 }
 
 * Casewise sample, so every model below is estimated on the same households.
-foreach v in `x' {
+foreach v in $x {
     drop if missing(`v')
 }
-drop if missing(fies_score, `wt', psu)
+drop if missing(fies_score, $wt, psu)
 
-svyset psu [pweight=`wt'], singleunit(centered)
+svyset psu [pweight=$wt], singleunit(centered)
 
 
 *------------------------------------------------------------------------------
 * Do the ownership variables exist?
 *------------------------------------------------------------------------------
-local has_own 1
+global has_own 1
 foreach v in female_landowner sole_female_ownership joint_ownership {
     capture confirm numeric variable `v'
-    if _rc local has_own 0
+    if _rc global has_own 0
 }
 
-if `has_own' == 0 {
+if $has_own == 0 {
+
     display as error "{hline 70}"
     display as error "Ownership variables not found in $analysis_dta."
     display as error "Spec A, Spec B and the sole-vs-joint Wald test are skipped."
@@ -139,51 +144,50 @@ if `has_own' == 0 {
     display as error "ethiopia_landowner.do) and run again."
     display as error "{hline 70}"
 
-    svy: regress fies_score `x' i.saq01
-    svy: logit fies_dummy `x' i.saq01
-    svy: logit severe_fi  `x' i.saq01
-    exit 0
+    svy: regress fies_score $x i.saq01
+    svy: logit fies_dummy $x i.saq01
+    svy: logit severe_fi  $x i.saq01
+
 }
+else {
 
+    *--------------------------------------------------------------------------
+    * 1. FIES score (linear)
+    *--------------------------------------------------------------------------
+    svy: regress fies_score female_landowner $x i.saq01
+    estimates store ols_a
 
-*------------------------------------------------------------------------------
-* 1. FIES score (linear)
-*------------------------------------------------------------------------------
-svy: regress fies_score female_landowner `x' i.saq01
-estimates store ols_a
+    svy: regress fies_score sole_female_ownership joint_ownership $x i.saq01
+    estimates store ols_b
+    test sole_female_ownership = joint_ownership
+    lincom sole_female_ownership - joint_ownership
 
-svy: regress fies_score sole_female_ownership joint_ownership `x' i.saq01
-estimates store ols_b
-test sole_female_ownership = joint_ownership
-lincom sole_female_ownership - joint_ownership
+    *--------------------------------------------------------------------------
+    * 2. Moderate or severe food insecurity (logit)
+    *--------------------------------------------------------------------------
+    svy: logit fies_dummy female_landowner $x i.saq01
+    estimates store logit_a
+    margins, dydx(*)
 
+    svy: logit fies_dummy sole_female_ownership joint_ownership $x i.saq01
+    estimates store logit_b
+    test sole_female_ownership = joint_ownership
+    lincom sole_female_ownership - joint_ownership
+    margins, dydx(*)
 
-*------------------------------------------------------------------------------
-* 2. Moderate or severe food insecurity (logit)
-*------------------------------------------------------------------------------
-svy: logit fies_dummy female_landowner `x' i.saq01
-estimates store logit_a
-margins, dydx(*)
+    *--------------------------------------------------------------------------
+    * 3. Severe food insecurity (logit)
+    *--------------------------------------------------------------------------
+    svy: logit severe_fi female_landowner $x i.saq01
+    estimates store sfi_a
+    margins, dydx(*)
 
-svy: logit fies_dummy sole_female_ownership joint_ownership `x' i.saq01
-estimates store logit_b
-test sole_female_ownership = joint_ownership
-lincom sole_female_ownership - joint_ownership
-margins, dydx(*)
+    svy: logit severe_fi sole_female_ownership joint_ownership $x i.saq01
+    estimates store sfi_b
+    test sole_female_ownership = joint_ownership
+    lincom sole_female_ownership - joint_ownership
+    margins, dydx(*)
 
+    estimates table ols_a ols_b logit_a logit_b sfi_a sfi_b, star stats(N)
 
-*------------------------------------------------------------------------------
-* 3. Severe food insecurity (logit)
-*------------------------------------------------------------------------------
-svy: logit severe_fi female_landowner `x' i.saq01
-estimates store sfi_a
-margins, dydx(*)
-
-svy: logit severe_fi sole_female_ownership joint_ownership `x' i.saq01
-estimates store sfi_b
-test sole_female_ownership = joint_ownership
-lincom sole_female_ownership - joint_ownership
-margins, dydx(*)
-
-
-estimates table ols_a ols_b logit_a logit_b sfi_a sfi_b, star stats(N)
+}
