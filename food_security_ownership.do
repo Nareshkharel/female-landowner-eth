@@ -38,8 +38,14 @@ set more off
 *   ownership_dta = female_ownership.dta -> the ownership dummies
 *   area_dta      = area_ethiopia.dta    -> sfi and total_land
 global analysis_dta  "fies_household.dta"
-global ownership_dta ""
-global area_dta      ""
+global ownership_dta "female_ownership.dta"
+global area_dta      "area_ethiopia.dta"
+
+* ethiopia_landowner.do codes a missing owner as "no female owner", so the
+* reference group mixes male-owned households with households whose owner
+* fields are all blank. Set to 1 to keep only households with an owner on
+* record, making sole-male ownership the reference.
+global owner_identified_only 0
 
 use "$analysis_dta", clear
 
@@ -57,6 +63,16 @@ if `"$ownership_dta"' != "" {
 if `"$area_dta"' != "" {
     merge 1:1 household_id using "$area_dta", ///
         keepusing(sfi total_land) keep(match) nogenerate
+}
+
+if $owner_identified_only == 1 {
+    capture confirm numeric variable female_landowner
+    if !_rc {
+        capture confirm numeric variable sole_male_ownership
+        if !_rc {
+            drop if female_landowner == 0 & sole_male_ownership == 0
+        }
+    }
 }
 
 

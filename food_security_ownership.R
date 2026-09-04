@@ -37,8 +37,14 @@ library(survey)
 #   ownership_dta = female_ownership.dta -> the ownership dummies
 #   area_dta      = area_ethiopia.dta    -> sfi and total_land
 analysis_dta  <- "fies_household.dta"
-ownership_dta <- NULL
-area_dta      <- NULL
+ownership_dta <- "female_ownership.dta"
+area_dta      <- "area_ethiopia.dta"
+
+# ethiopia_landowner.do codes a missing owner as "no female owner", so the
+# reference group mixes male-owned households with households whose owner
+# fields are all blank. TRUE keeps only households with an owner on record,
+# making sole-male ownership the reference.
+owner_identified_only <- FALSE
 
 d <- as.data.frame(zap_labels(read_dta(analysis_dta)))
 
@@ -56,6 +62,13 @@ d <- merge_keep(d, ownership_dta,
                 c("female_landowner", "sole_female_ownership", "joint_ownership",
                   "sole_male_ownership", "number_plots_female", "soil_fertility"))
 d <- merge_keep(d, area_dta, c("sfi", "total_land"))
+
+if (owner_identified_only && all(c("female_landowner", "sole_male_ownership") %in% names(d))) {
+  before <- nrow(d)
+  d <- subset(d, female_landowner == 1 | sole_male_ownership == 1)
+  message("owner_identified_only: dropped ", before - nrow(d),
+          " households with no owner on record")
+}
 
 #------------------------------------------------------------------------------
 # Design identifiers
