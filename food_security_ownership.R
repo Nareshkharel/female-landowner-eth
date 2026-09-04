@@ -1,12 +1,15 @@
 # Food security and female land ownership
-# Ethiopia ESPS Wave 5
+# Ethiopia ESPS Wave 5 -- runs on fies_household.dta (one row per household)
 #
 # Spec A: any female ownership           (female_landowner)
 # Spec B: sole vs joint female ownership (sole_female_ownership, joint_ownership)
 #
 # Survey design
-#   Weight:  svwt   (kebele-level survey weight)
-#   Cluster: kebele (PSU). saq06 is used if kebele is not already in the data.
+#   Weight:  svwt if present, otherwise pw_w5 (the household weight shipped
+#            with the survey).
+#   Cluster: ea_id, the sampling PSU. saq06 is only a kebele *code* (40 values
+#            that repeat across regions), so it is not a usable cluster on its
+#            own; kebele below is built from saq01-saq06 and can be swapped in.
 #
 # Formal test (run after every Spec B model)
 #   H0: beta_sole = beta_joint
@@ -19,121 +22,173 @@
 #     different. Spec A is adequate; report "any female ownership."
 #   Reject H0 (p < 0.05): do not pool. Use Spec B and interpret sole and
 #     joint against the omitted group (no female owner) separately.
-#   The printed difference is the same contrast with SE, z, and 95% CI.
+#   The printed difference is the same contrast with SE, t, and 95% CI.
+#
+# fies_household.dta carries the outcome and most controls but no ownership
+# variables. Set ownership_dta to the female_ownership.dta built by
+# ethiopia_landowner.do to estimate Spec A and Spec B.
 #
 # Packages: haven, survey
-#   install.packages(c("haven", "survey"))
 
 library(haven)
 library(survey)
 
-# Path to the merged household analysis file. Edit before running.
-analysis_dta <- "analysis_household.dta"
+analysis_dta  <- "fies_household.dta"
+ownership_dta <- NULL
 
-d <- zap_labels(read_dta(analysis_dta))
-d <- as.data.frame(d)
+d <- as.data.frame(zap_labels(read_dta(analysis_dta)))
 
-#------------------------------------------------------------------------------
-# Identifiers, outcomes, sample
-#------------------------------------------------------------------------------
-if (!"kebele" %in% names(d)) {
-  d$kebele <- as.numeric(as.character(d$saq06))
+if (!is.null(ownership_dta)) {
+  own <- as.data.frame(zap_labels(read_dta(ownership_dta)))
+  keep <- intersect(
+    c("household_id", "female_landowner", "sole_female_ownership",
+      "joint_ownership", "sole_male_ownership", "sfi", "soil_fertility"),
+    names(own)
+  )
+  d <- merge(d, own[, keep], by = "household_id")
 }
 
+#------------------------------------------------------------------------------
+# Design identifiers
+#------------------------------------------------------------------------------
+d$kebele <- as.integer(factor(with(
+  d, paste(saq01, saq02, saq03, saq04, saq05, saq06, sep = "_")
+)))
+
+d$psu <- if ("ea_id" %in% names(d)) as.integer(factor(d$ea_id)) else d$kebele
+
+wt <- intersect(c("svwt", "pw_w5"), names(d))[1]
+if (is.na(wt)) stop("no survey weight (svwt or pw_w5) found")
+d$.wt <- as.numeric(d[[wt]])
+message("weight = ", wt)
+
+#------------------------------------------------------------------------------
+# Outcomes and controls
+#------------------------------------------------------------------------------
 if (!"fies_score" %in% names(d)) {
   d$fies_score <- with(
     d, worried + healthy + fewfoods + skipped + ateless + wholeday + ranout + hungry
   )
 }
 
+if (!"basic_educ" %in% names(d)) d$basic_educ <- d$basic_education
+
+# Working-age members are the denominator, so households with none are missing.
+if (!"dependency_ratio" %in% names(d)) {
+  d$dependency_ratio <- ifelse(
+    d$active_hh_member > 0,
+    (d$household_size - d$active_hh_member) / d$active_hh_member,
+    NA_real_
+  )
+}
+
 d <- subset(d, fies_score <= 8)
-d <- d[
-  complete.cases(d[, c(
-    "dependency_ratio", "soil_fertility", "sfi", "svwt", "kebele"
-  )]),
-]
 
 d$fies_dummy <- as.integer(d$fies_score >= 4)
 d$severe_fi  <- as.integer(d$fies_score > 6)
 
-#------------------------------------------------------------------------------
-# Survey design: PSU = kebele, weight = svwt
-#------------------------------------------------------------------------------
-des <- svydesign(ids = ~kebele, weights = ~svwt, data = d)
+# sfi and soil_fertility come from the post-planting files and are absent from
+# fies_household.dta, so controls are assembled from what the data holds.
+candidates <- c("sfi", "age", "basic_educ", "male_head", "dependency_ratio",
+                "non_farm_enterprise", "wealth_index", "dist_admhq",
+                "dist_road", "soil_fertility", "drought_shock")
+x <- intersect(candidates, names(d))
+dropped <- setdiff(candidates, x)
+if (length(dropped)) message("controls not in data, omitted: ",
+                             paste(dropped, collapse = ", "))
 
-rhs_a <- paste(
-  "female_landowner",
-  "sfi", "age", "basic_educ", "male_head", "dependency_ratio",
-  "non_farm_enterprise", "wealth_index", "dist_admhq", "dist_road",
-  "soil_fertility", "drought_shock", "factor(saq01)",
-  sep = " + "
-)
-rhs_b <- sub("female_landowner",
-             "sole_female_ownership + joint_ownership",
-             rhs_a,
-             fixed = TRUE)
+# Casewise sample, so every model below is estimated on the same households.
+d <- d[complete.cases(d[, c(x, "fies_score", ".wt", "psu", "saq01")]), ]
+message("estimation sample: ", nrow(d), " households, ",
+        length(unique(d$psu)), " clusters")
 
-# Wald test of H0: beta_sole = beta_joint (survey VCE)
+des <- svydesign(ids = ~psu, weights = ~.wt, data = d)
+
+rhs <- function(own) paste(c(own, x, "factor(saq01)"), collapse = " + ")
+
+# Wald test of H0: beta_sole = beta_joint, using the survey VCE and the same
+# residual degrees of freedom that summary() reports.
 wald_sole_eq_joint <- function(model) {
   b1 <- "sole_female_ownership"
   b2 <- "joint_ownership"
-  b  <- coef(model)
-  V  <- vcov(model)
+  b <- coef(model)
+  V <- vcov(model)
+  df <- df.residual(model)
   diff <- unname(b[b1] - b[b2])
-  se   <- sqrt(V[b1, b1] + V[b2, b2] - 2 * V[b1, b2])
-  z    <- diff / se
-  p    <- 2 * pnorm(-abs(z))
-  out  <- data.frame(
+  se <- sqrt(V[b1, b1] + V[b2, b2] - 2 * V[b1, b2])
+  tstat <- diff / se
+  out <- data.frame(
     difference = diff,
     se = se,
-    z = z,
-    p_value = p,
-    ci95_low = diff - 1.96 * se,
-    ci95_high = diff + 1.96 * se
+    t = tstat,
+    df = df,
+    p_value = 2 * pt(-abs(tstat), df),
+    ci95_low = diff - qt(0.975, df) * se,
+    ci95_high = diff + qt(0.975, df) * se
   )
   print(out)
   invisible(out)
 }
 
 #------------------------------------------------------------------------------
-# 1. FIES score (linear)
+# Do the ownership variables exist?
 #------------------------------------------------------------------------------
-ols_a <- svyglm(as.formula(paste("fies_score ~", rhs_a)), design = des)
-ols_b <- svyglm(as.formula(paste("fies_score ~", rhs_b)), design = des)
-summary(ols_a)
-summary(ols_b)
-wald_sole_eq_joint(ols_b)
+own_vars <- c("female_landowner", "sole_female_ownership", "joint_ownership")
 
-#------------------------------------------------------------------------------
-# 2. Moderate or severe food insecurity (logit)
-#------------------------------------------------------------------------------
-logit_a <- svyglm(
-  as.formula(paste("fies_dummy ~", rhs_a)),
-  design = des,
-  family = quasibinomial()
-)
-logit_b <- svyglm(
-  as.formula(paste("fies_dummy ~", rhs_b)),
-  design = des,
-  family = quasibinomial()
-)
-summary(logit_a)
-summary(logit_b)
-wald_sole_eq_joint(logit_b)
+if (!all(own_vars %in% names(d))) {
+  message(strrep("-", 70))
+  message("Ownership variables not found in ", analysis_dta, ".")
+  message("Spec A, Spec B and the sole-vs-joint Wald test are skipped.")
+  message("Set ownership_dta to female_ownership.dta (built by")
+  message("ethiopia_landowner.do) and run again.")
+  message(strrep("-", 70))
 
-#------------------------------------------------------------------------------
-# 3. Severe food insecurity (logit)
-#------------------------------------------------------------------------------
-sfi_a <- svyglm(
-  as.formula(paste("severe_fi ~", rhs_a)),
-  design = des,
-  family = quasibinomial()
-)
-sfi_b <- svyglm(
-  as.formula(paste("severe_fi ~", rhs_b)),
-  design = des,
-  family = quasibinomial()
-)
-summary(sfi_a)
-summary(sfi_b)
-wald_sole_eq_joint(sfi_b)
+  print(summary(svyglm(as.formula(paste("fies_score ~", rhs(NULL))), design = des)))
+  print(summary(svyglm(as.formula(paste("fies_dummy ~", rhs(NULL))),
+                       design = des, family = quasibinomial())))
+  print(summary(svyglm(as.formula(paste("severe_fi ~", rhs(NULL))),
+                       design = des, family = quasibinomial())))
+} else {
+
+  #----------------------------------------------------------------------------
+  # 1. FIES score (linear)
+  #----------------------------------------------------------------------------
+  ols_a <- svyglm(as.formula(paste("fies_score ~", rhs("female_landowner"))),
+                  design = des)
+  ols_b <- svyglm(
+    as.formula(paste("fies_score ~",
+                     rhs(c("sole_female_ownership", "joint_ownership")))),
+    design = des
+  )
+  print(summary(ols_a))
+  print(summary(ols_b))
+  wald_sole_eq_joint(ols_b)
+
+  #----------------------------------------------------------------------------
+  # 2. Moderate or severe food insecurity (logit)
+  #----------------------------------------------------------------------------
+  logit_a <- svyglm(as.formula(paste("fies_dummy ~", rhs("female_landowner"))),
+                    design = des, family = quasibinomial())
+  logit_b <- svyglm(
+    as.formula(paste("fies_dummy ~",
+                     rhs(c("sole_female_ownership", "joint_ownership")))),
+    design = des, family = quasibinomial()
+  )
+  print(summary(logit_a))
+  print(summary(logit_b))
+  wald_sole_eq_joint(logit_b)
+
+  #----------------------------------------------------------------------------
+  # 3. Severe food insecurity (logit)
+  #----------------------------------------------------------------------------
+  sfi_a <- svyglm(as.formula(paste("severe_fi ~", rhs("female_landowner"))),
+                  design = des, family = quasibinomial())
+  sfi_b <- svyglm(
+    as.formula(paste("severe_fi ~",
+                     rhs(c("sole_female_ownership", "joint_ownership")))),
+    design = des, family = quasibinomial()
+  )
+  print(summary(sfi_a))
+  print(summary(sfi_b))
+  wald_sole_eq_joint(sfi_b)
+}

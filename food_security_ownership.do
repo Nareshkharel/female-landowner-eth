@@ -1,15 +1,18 @@
 ********************************************************************************
 * Food security and female land ownership
-* Ethiopia ESPS Wave 5
+* Ethiopia ESPS Wave 5 -- runs on fies_household.dta (one row per household)
 *
 * Spec A: any female ownership          (female_landowner)
 * Spec B: sole vs joint female ownership (sole_female_ownership, joint_ownership)
 *
 * Survey design
-*   Weight:  svwt   (kebele-level survey weight)
-*   Cluster: kebele (PSU). saq06 is used if kebele is not already in the data.
+*   Weight:  svwt if present, otherwise pw_w5 (the household weight shipped
+*            with the survey).
+*   Cluster: ea_id, the sampling PSU. saq06 is only a kebele *code* (40 values
+*            that repeat across regions), so it is not a usable cluster on its
+*            own; kebele below is built from saq01-saq06 and can be swapped in.
 *   Do not add vce(robust) or vce(cluster ...) on the estimation command;
-*   svyset already clusters at kebele.
+*   svyset already clusters.
 *
 * Formal test (run after every Spec B model)
 *   H0: _b[sole_female_ownership] = _b[joint_ownership]
@@ -23,61 +26,133 @@
 *   Reject H0 (p < 0.05): do not pool. Use Spec B and interpret sole and
 *     joint against the omitted group (no female owner) separately.
 *   lincom reports the same contrast as a difference with SE and CI.
+*
+* fies_household.dta carries the outcome and most controls but no ownership
+* variables. Set ownership_dta to the female_ownership.dta built by
+* ethiopia_landowner.do to estimate Spec A and Spec B.
 ********************************************************************************
 
 set more off
 
-* Leave empty to use the merged household data already in memory.
-* Otherwise point to the saved analysis .dta.
-global analysis_dta ""
+global analysis_dta  "fies_household.dta"
+global ownership_dta ""
 
-if `"$analysis_dta"' != "" {
-    use "$analysis_dta", clear
+use "$analysis_dta", clear
+
+if `"$ownership_dta"' != "" {
+    merge 1:1 household_id using "$ownership_dta", keep(match) nogenerate
 }
 
 
 *------------------------------------------------------------------------------
-* Identifiers, outcomes, sample
+* Design identifiers
 *------------------------------------------------------------------------------
-capture confirm variable kebele
-if _rc {
-    destring saq06, generate(kebele)
+egen kebele = group(saq01 saq02 saq03 saq04 saq05 saq06)
+label var kebele "kebele (from geographic codes; saq06 alone is not unique)"
+
+capture confirm variable ea_id
+if !_rc {
+    egen psu = group(ea_id)
+}
+else {
+    gen psu = kebele
 }
 
-capture confirm variable fies_score
+local wt ""
+foreach v in svwt pw_w5 {
+    capture confirm numeric variable `v'
+    if !_rc & "`wt'" == "" local wt `v'
+}
+if "`wt'" == "" {
+    display as error "no survey weight (svwt or pw_w5) found"
+    exit 111
+}
+display as text "weight = `wt'"
+
+
+*------------------------------------------------------------------------------
+* Outcomes and controls
+*------------------------------------------------------------------------------
+capture confirm numeric variable fies_score
 if _rc {
     gen fies_score = worried + healthy + fewfoods + skipped ///
                    + ateless + wholeday + ranout + hungry
 }
 
-drop if fies_score > 8
-drop if missing(dependency_ratio, soil_fertility, sfi, svwt, kebele)
+capture confirm numeric variable basic_educ
+if _rc {
+    gen basic_educ = basic_education
+}
 
-capture drop fies_dummy severe_fi
+* Working-age members are the denominator, so households with none are missing.
+capture confirm numeric variable dependency_ratio
+if _rc {
+    gen dependency_ratio = (household_size - active_hh_member) / active_hh_member ///
+        if active_hh_member > 0
+}
+
+drop if fies_score > 8
+
 gen fies_dummy = (fies_score >= 4) if !missing(fies_score)
 gen severe_fi  = (fies_score > 6)  if !missing(fies_score)
 
 label var fies_dummy "1 = moderate or severe FI (FIES >= 4)"
 label var severe_fi  "1 = severe FI (FIES > 6)"
 
+* sfi and soil_fertility come from the post-planting files and are absent from
+* fies_household.dta, so controls are assembled from what the data holds.
+local x ""
+foreach v in sfi age basic_educ male_head dependency_ratio non_farm_enterprise ///
+             wealth_index dist_admhq dist_road soil_fertility drought_shock {
+    capture confirm numeric variable `v'
+    if !_rc {
+        local x `x' `v'
+    }
+    else {
+        display as text "note: control `v' not in data, omitted"
+    }
+}
+
+* Casewise sample, so every model below is estimated on the same households.
+foreach v in `x' {
+    drop if missing(`v')
+}
+drop if missing(fies_score, `wt', psu)
+
+svyset psu [pweight=`wt'], singleunit(centered)
+
 
 *------------------------------------------------------------------------------
-* Survey design: PSU = kebele, weight = svwt
+* Do the ownership variables exist?
 *------------------------------------------------------------------------------
-svyset kebele [pweight=svwt], singleunit(centered)
+local has_own 1
+foreach v in female_landowner sole_female_ownership joint_ownership {
+    capture confirm numeric variable `v'
+    if _rc local has_own 0
+}
 
-global x sfi age basic_educ male_head dependency_ratio ///
-         non_farm_enterprise wealth_index dist_admhq dist_road ///
-         soil_fertility drought_shock
+if `has_own' == 0 {
+    display as error "{hline 70}"
+    display as error "Ownership variables not found in $analysis_dta."
+    display as error "Spec A, Spec B and the sole-vs-joint Wald test are skipped."
+    display as error "Set ownership_dta to female_ownership.dta (built by"
+    display as error "ethiopia_landowner.do) and run again."
+    display as error "{hline 70}"
+
+    svy: regress fies_score `x' i.saq01
+    svy: logit fies_dummy `x' i.saq01
+    svy: logit severe_fi  `x' i.saq01
+    exit 0
+}
 
 
 *------------------------------------------------------------------------------
 * 1. FIES score (linear)
 *------------------------------------------------------------------------------
-svy: regress fies_score female_landowner $x i.saq01
+svy: regress fies_score female_landowner `x' i.saq01
 estimates store ols_a
 
-svy: regress fies_score sole_female_ownership joint_ownership $x i.saq01
+svy: regress fies_score sole_female_ownership joint_ownership `x' i.saq01
 estimates store ols_b
 test sole_female_ownership = joint_ownership
 lincom sole_female_ownership - joint_ownership
@@ -86,11 +161,11 @@ lincom sole_female_ownership - joint_ownership
 *------------------------------------------------------------------------------
 * 2. Moderate or severe food insecurity (logit)
 *------------------------------------------------------------------------------
-svy: logit fies_dummy female_landowner $x i.saq01
+svy: logit fies_dummy female_landowner `x' i.saq01
 estimates store logit_a
 margins, dydx(*)
 
-svy: logit fies_dummy sole_female_ownership joint_ownership $x i.saq01
+svy: logit fies_dummy sole_female_ownership joint_ownership `x' i.saq01
 estimates store logit_b
 test sole_female_ownership = joint_ownership
 lincom sole_female_ownership - joint_ownership
@@ -100,11 +175,11 @@ margins, dydx(*)
 *------------------------------------------------------------------------------
 * 3. Severe food insecurity (logit)
 *------------------------------------------------------------------------------
-svy: logit severe_fi female_landowner $x i.saq01
+svy: logit severe_fi female_landowner `x' i.saq01
 estimates store sfi_a
 margins, dydx(*)
 
-svy: logit severe_fi sole_female_ownership joint_ownership $x i.saq01
+svy: logit severe_fi sole_female_ownership joint_ownership `x' i.saq01
 estimates store sfi_b
 test sole_female_ownership = joint_ownership
 lincom sole_female_ownership - joint_ownership
