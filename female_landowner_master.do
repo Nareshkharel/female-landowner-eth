@@ -42,14 +42,32 @@ global root "/Users/nareshkharel/Desktop/Thesis/ETH_2021_ESPS-W5_v01_M_Stata_1"
 global hh   "$root/Household"
 global pp   "$root/Post_planting"
 
+* Fail here, rather than several commands later, if $root is not set correctly.
+capture cd "$root"
+if _rc {
+    display as error "Cannot open the data folder: $root"
+    display as error "Edit the \$root global at the top of this do-file."
+    exit 170
+}
+
 capture log close _all
 log using "$root/female_landowner_master.log", replace text
 
 * Community commands used below. `capture` keeps a re-run from stopping on
-* "already installed".
+* "already installed", and keeps a machine with no internet from stopping here.
 capture ssc install outreg2
 capture ssc install factortest
 capture ssc install distinct
+
+* Without these the run would die part-way through, after writing some tables.
+foreach cmd in outreg2 factortest distinct {
+    capture which `cmd'
+    if _rc {
+        display as error "Required community command `cmd' is not installed."
+        display as error "Install it on a machine with internet: ssc install `cmd'"
+        exit 199
+    }
+}
 
 
 *===============================================================================
@@ -830,8 +848,15 @@ save "$root/female_landowner_analysis.dta", replace
 * areas. ea_id itself stays in the data.
 *-------------------------------------------------------------------------------
 capture drop ea_cluster
+capture confirm variable ea_id
+if _rc {
+    display as error "ea_id is not in the data, so Part 4 and Part 5 cannot run."
+    exit 111
+}
+
 capture confirm string variable ea_id
-if _rc == 0 {
+local ea_is_string = (_rc == 0)
+if `ea_is_string' {
     egen ea_cluster = group(ea_id)
 }
 else {
@@ -997,13 +1022,15 @@ program define fl_horserace
         display as error "  read TEST 1 and TEST 4 as approximate."
     }
 
+    * Stored under per-outcome names so that after the run you can line the two
+    * specifications up side by side, e.g. estimates table A_fies_dummy B_fies_dummy
     display as text _n "--- Model A: pooled female_landowner (weighted, clustered) ---"
     svy: `estimator' `y' female_landowner `controls'
-    estimates store flA
+    estimates store A_`y'
 
     display as text _n "--- Model B: sole + joint ownership (weighted, clustered) ---"
     svy: `estimator' `y' sole_female_ownership joint_ownership `controls'
-    estimates store flB
+    estimates store B_`y'
 
     display as text _n "TEST 1  Adjusted Wald test, H0: b(sole) = b(joint)"
     display as text "        p < 0.05 favours Model B; otherwise Model A is adequate."
