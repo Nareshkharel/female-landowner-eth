@@ -28,10 +28,18 @@
 # variables. Set ownership_dta to the female_ownership.dta built by
 # ethiopia_landowner.do to estimate Spec A and Spec B.
 #
-# Packages: haven, survey
+# Packages: haven, survey, sandwich, lmtest
+#
+# Two designs are estimated on the same households:
+#   PREVIOUS -- unweighted, Huber-White SEs (the original
+#               female landowner analysis.do block: regress/logit, vce(robust);
+#               OLS on fies_score also includes married).
+#   NEW      -- pw_w5 / svwt weights, SEs clustered on ea_id.
 
 library(haven)
 library(survey)
+library(sandwich)
+library(lmtest)
 
 # Outputs of ethiopia_landowner.do. Leave NULL to run without them.
 #   ownership_dta = female_ownership.dta -> the ownership dummies
@@ -128,13 +136,12 @@ des <- svydesign(ids = ~psu, weights = ~.wt, data = d)
 
 rhs <- function(own) paste(c(own, x, "factor(saq01)"), collapse = " + ")
 
-# Wald test of H0: beta_sole = beta_joint, using the survey VCE and the same
-# residual degrees of freedom that summary() reports.
-wald_sole_eq_joint <- function(model) {
+# Wald test of H0: beta_sole = beta_joint. Pass vcov so the same helper
+# works for the previous robust models and the new survey models.
+wald_sole_eq_joint <- function(model, V = vcov(model)) {
   b1 <- "sole_female_ownership"
   b2 <- "joint_ownership"
   b <- coef(model)
-  V <- vcov(model)
   df <- df.residual(model)
   diff <- unname(b[b1] - b[b2])
   se <- sqrt(V[b1, b1] + V[b2, b2] - 2 * V[b1, b2])
@@ -150,6 +157,33 @@ wald_sole_eq_joint <- function(model) {
   )
   print(out)
   invisible(out)
+}
+
+# Previous-spec helpers: unweighted, Stata vce(robust) = HC1 for OLS, HC0 for logit.
+rhs_old_ols <- function(own) {
+  extra <- if ("married" %in% names(d)) "married" else NULL
+  paste(c(own, x, extra, "factor(saq01)"), collapse = " + ")
+}
+
+fit_old_ols <- function(own) {
+  m <- lm(as.formula(paste("fies_score ~", rhs_old_ols(own))), data = d)
+  print(coeftest(m, vcovHC(m, type = "HC1")))
+  m
+}
+
+fit_old_logit <- function(y, own) {
+  m <- glm(as.formula(paste(y, "~", rhs(own))), data = d, family = binomial())
+  print(coeftest(m, vcovHC(m, type = "HC0")))
+  m
+}
+
+own_row <- function(model, v, V = vcov(model)) {
+  b <- unname(coef(model)[v])
+  se <- sqrt(V[v, v])
+  z <- b / se
+  p <- 2 * pnorm(-abs(z))
+  stars <- if (p < 0.01) "***" else if (p < 0.05) "**" else if (p < 0.1) "*" else ""
+  sprintf("%7.3f (%.3f)%-3s", b, se, stars)
 }
 
 #------------------------------------------------------------------------------
@@ -172,45 +206,106 @@ if (!all(own_vars %in% names(d))) {
                        design = des, family = quasibinomial())))
 } else {
 
-  #----------------------------------------------------------------------------
-  # 1. FIES score (linear)
-  #----------------------------------------------------------------------------
-  ols_a <- svyglm(as.formula(paste("fies_score ~", rhs("female_landowner"))),
-                  design = des)
-  ols_b <- svyglm(
-    as.formula(paste("fies_score ~",
-                     rhs(c("sole_female_ownership", "joint_ownership")))),
-    design = des
-  )
+  own_a <- "female_landowner"
+  own_b <- c("sole_female_ownership", "joint_ownership")
+
+  #--------------------------------------------------------------------------
+  # PREVIOUS: unweighted, vce(robust) -- matches female landowner analysis.do
+  # OLS includes married; logits do not.
+  #--------------------------------------------------------------------------
+  message(strrep("=", 70))
+  message("PREVIOUS: unweighted, Huber-White robust SEs")
+  message(strrep("=", 70))
+
+  old_ols_a <- fit_old_ols(own_a)
+  old_ols_b <- fit_old_ols(own_b)
+  message("Wald (previous OLS)")
+  wald_sole_eq_joint(old_ols_b, vcovHC(old_ols_b, type = "HC1"))
+
+  old_logit_a <- fit_old_logit("fies_dummy", own_a)
+  old_logit_b <- fit_old_logit("fies_dummy", own_b)
+  message("Wald (previous moderate/severe FI)")
+  wald_sole_eq_joint(old_logit_b, vcovHC(old_logit_b, type = "HC0"))
+
+  old_sfi_a <- fit_old_logit("severe_fi", own_a)
+  old_sfi_b <- fit_old_logit("severe_fi", own_b)
+  message("Wald (previous severe FI)")
+  wald_sole_eq_joint(old_sfi_b, vcovHC(old_sfi_b, type = "HC0"))
+
+  #--------------------------------------------------------------------------
+  # NEW: survey weights + EA cluster
+  #--------------------------------------------------------------------------
+  message(strrep("=", 70))
+  message("NEW: ", wt, " weights, SEs clustered on ea_id")
+  message(strrep("=", 70))
+
+  ols_a <- svyglm(as.formula(paste("fies_score ~", rhs(own_a))), design = des)
+  ols_b <- svyglm(as.formula(paste("fies_score ~", rhs(own_b))), design = des)
   print(summary(ols_a))
   print(summary(ols_b))
+  message("Wald (new OLS)")
   wald_sole_eq_joint(ols_b)
 
-  #----------------------------------------------------------------------------
-  # 2. Moderate or severe food insecurity (logit)
-  #----------------------------------------------------------------------------
-  logit_a <- svyglm(as.formula(paste("fies_dummy ~", rhs("female_landowner"))),
+  logit_a <- svyglm(as.formula(paste("fies_dummy ~", rhs(own_a))),
                     design = des, family = quasibinomial())
-  logit_b <- svyglm(
-    as.formula(paste("fies_dummy ~",
-                     rhs(c("sole_female_ownership", "joint_ownership")))),
-    design = des, family = quasibinomial()
-  )
+  logit_b <- svyglm(as.formula(paste("fies_dummy ~", rhs(own_b))),
+                    design = des, family = quasibinomial())
   print(summary(logit_a))
   print(summary(logit_b))
+  message("Wald (new moderate/severe FI)")
   wald_sole_eq_joint(logit_b)
 
-  #----------------------------------------------------------------------------
-  # 3. Severe food insecurity (logit)
-  #----------------------------------------------------------------------------
-  sfi_a <- svyglm(as.formula(paste("severe_fi ~", rhs("female_landowner"))),
+  sfi_a <- svyglm(as.formula(paste("severe_fi ~", rhs(own_a))),
                   design = des, family = quasibinomial())
-  sfi_b <- svyglm(
-    as.formula(paste("severe_fi ~",
-                     rhs(c("sole_female_ownership", "joint_ownership")))),
-    design = des, family = quasibinomial()
-  )
+  sfi_b <- svyglm(as.formula(paste("severe_fi ~", rhs(own_b))),
+                  design = des, family = quasibinomial())
   print(summary(sfi_a))
   print(summary(sfi_b))
+  message("Wald (new severe FI)")
   wald_sole_eq_joint(sfi_b)
+
+  #--------------------------------------------------------------------------
+  # Side-by-side ownership coefficients
+  #--------------------------------------------------------------------------
+  cat("\n", strrep("=", 100), "\n", sep = "")
+  cat("COMPARISON  n = ", nrow(d), " households. Previous = unweighted robust. New = ",
+      wt, " + cluster ea_id.\n", sep = "")
+  cat("OLS previous includes married (original do-file). Logits do not.\n")
+  cat(strrep("=", 100), "\n", sep = "")
+  cat(sprintf("%-28s %-22s %-22s\n", "", "PREVIOUS (robust)", "NEW (survey)"))
+
+  rows <- list(
+    list("FIES score, any female",
+         old_ols_a, "female_landowner", vcovHC(old_ols_a, type = "HC1"),
+         ols_a, "female_landowner", vcov(ols_a)),
+    list("FIES score, sole female",
+         old_ols_b, "sole_female_ownership", vcovHC(old_ols_b, type = "HC1"),
+         ols_b, "sole_female_ownership", vcov(ols_b)),
+    list("FIES score, joint",
+         old_ols_b, "joint_ownership", vcovHC(old_ols_b, type = "HC1"),
+         ols_b, "joint_ownership", vcov(ols_b)),
+    list("Mod/sev FI, any female",
+         old_logit_a, "female_landowner", vcovHC(old_logit_a, type = "HC0"),
+         logit_a, "female_landowner", vcov(logit_a)),
+    list("Mod/sev FI, sole female",
+         old_logit_b, "sole_female_ownership", vcovHC(old_logit_b, type = "HC0"),
+         logit_b, "sole_female_ownership", vcov(logit_b)),
+    list("Mod/sev FI, joint",
+         old_logit_b, "joint_ownership", vcovHC(old_logit_b, type = "HC0"),
+         logit_b, "joint_ownership", vcov(logit_b)),
+    list("Severe FI, any female",
+         old_sfi_a, "female_landowner", vcovHC(old_sfi_a, type = "HC0"),
+         sfi_a, "female_landowner", vcov(sfi_a)),
+    list("Severe FI, sole female",
+         old_sfi_b, "sole_female_ownership", vcovHC(old_sfi_b, type = "HC0"),
+         sfi_b, "sole_female_ownership", vcov(sfi_b)),
+    list("Severe FI, joint",
+         old_sfi_b, "joint_ownership", vcovHC(old_sfi_b, type = "HC0"),
+         sfi_b, "joint_ownership", vcov(sfi_b))
+  )
+  for (r in rows) {
+    cat(sprintf("%-28s %-22s %-22s\n", r[[1]],
+                own_row(r[[2]], r[[3]], r[[4]]),
+                own_row(r[[5]], r[[6]], r[[7]])))
+  }
 }

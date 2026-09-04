@@ -30,6 +30,11 @@
 * fies_household.dta carries the outcome and most controls but no ownership
 * variables. Set ownership_dta to the female_ownership.dta built by
 * ethiopia_landowner.do to estimate Spec A and Spec B.
+*
+* Two designs on the same households:
+*   PREVIOUS -- unweighted, vce(robust), matching female landowner analysis.do
+*               (OLS on fies_score also includes married).
+*   NEW      -- svyset with pweight and PSU cluster.
 ********************************************************************************
 
 set more off
@@ -184,8 +189,49 @@ if $has_own == 0 {
 else {
 
     *--------------------------------------------------------------------------
-    * 1. FIES score (linear)
+    * PREVIOUS: unweighted, vce(robust) -- female landowner analysis.do
+    * OLS includes married; logits do not.
     *--------------------------------------------------------------------------
+    display as text _n "PREVIOUS: unweighted, Huber-White robust SEs"
+
+    capture confirm numeric variable married
+    if _rc {
+        local married_ctrl
+        display as text "note: married not in data, omitted from previous OLS"
+    }
+    else {
+        local married_ctrl married
+    }
+
+    regress fies_score female_landowner $x `married_ctrl' i.saq01, vce(robust)
+    estimates store old_ols_a
+
+    regress fies_score sole_female_ownership joint_ownership $x `married_ctrl' i.saq01, vce(robust)
+    estimates store old_ols_b
+    test sole_female_ownership = joint_ownership
+    lincom sole_female_ownership - joint_ownership
+
+    logit fies_dummy female_landowner $x i.saq01, vce(robust)
+    estimates store old_logit_a
+
+    logit fies_dummy sole_female_ownership joint_ownership $x i.saq01, vce(robust)
+    estimates store old_logit_b
+    test sole_female_ownership = joint_ownership
+    lincom sole_female_ownership - joint_ownership
+
+    logit severe_fi female_landowner $x i.saq01, vce(robust)
+    estimates store old_sfi_a
+
+    logit severe_fi sole_female_ownership joint_ownership $x i.saq01, vce(robust)
+    estimates store old_sfi_b
+    test sole_female_ownership = joint_ownership
+    lincom sole_female_ownership - joint_ownership
+
+    *--------------------------------------------------------------------------
+    * NEW: survey weights + EA cluster
+    *--------------------------------------------------------------------------
+    display as text _n "NEW: $wt weights, SEs clustered on the PSU"
+
     svy: regress fies_score female_landowner $x i.saq01
     estimates store ols_a
 
@@ -194,9 +240,6 @@ else {
     test sole_female_ownership = joint_ownership
     lincom sole_female_ownership - joint_ownership
 
-    *--------------------------------------------------------------------------
-    * 2. Moderate or severe food insecurity (logit)
-    *--------------------------------------------------------------------------
     svy: logit fies_dummy female_landowner $x i.saq01
     estimates store logit_a
     margins, dydx(*)
@@ -207,9 +250,6 @@ else {
     lincom sole_female_ownership - joint_ownership
     margins, dydx(*)
 
-    *--------------------------------------------------------------------------
-    * 3. Severe food insecurity (logit)
-    *--------------------------------------------------------------------------
     svy: logit severe_fi female_landowner $x i.saq01
     estimates store sfi_a
     margins, dydx(*)
@@ -220,6 +260,12 @@ else {
     lincom sole_female_ownership - joint_ownership
     margins, dydx(*)
 
-    estimates table ols_a ols_b logit_a logit_b sfi_a sfi_b, star stats(N)
+    display as text _n "PREVIOUS (robust) vs NEW (survey) -- ownership coefficients"
+    estimates table old_ols_a ols_a old_ols_b ols_b, ///
+        keep(female_landowner sole_female_ownership joint_ownership) star stats(N)
+    estimates table old_logit_a logit_a old_logit_b logit_b, ///
+        keep(female_landowner sole_female_ownership joint_ownership) star stats(N)
+    estimates table old_sfi_a sfi_a old_sfi_b sfi_b, ///
+        keep(female_landowner sole_female_ownership joint_ownership) star stats(N)
 
 }
