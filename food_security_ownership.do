@@ -213,19 +213,23 @@ else {
 
     logit fies_dummy female_landowner $x i.saq01, vce(robust)
     estimates store old_logit_a
+    margins, dydx(*)
 
     logit fies_dummy sole_female_ownership joint_ownership $x i.saq01, vce(robust)
     estimates store old_logit_b
     test sole_female_ownership = joint_ownership
     lincom sole_female_ownership - joint_ownership
+    margins, dydx(*)
 
     logit severe_fi female_landowner $x i.saq01, vce(robust)
     estimates store old_sfi_a
+    margins, dydx(*)
 
     logit severe_fi sole_female_ownership joint_ownership $x i.saq01, vce(robust)
     estimates store old_sfi_b
     test sole_female_ownership = joint_ownership
     lincom sole_female_ownership - joint_ownership
+    margins, dydx(*)
 
     *--------------------------------------------------------------------------
     * NEW: survey weights + EA cluster
@@ -260,12 +264,15 @@ else {
     lincom sole_female_ownership - joint_ownership
     margins, dydx(*)
 
-    display as text _n "PREVIOUS (robust) vs NEW (survey) -- ownership coefficients"
+    display as text _n "PREVIOUS (robust) vs NEW (survey) -- ownership and region"
     estimates table old_ols_a ols_a old_ols_b ols_b, ///
-        keep(female_landowner sole_female_ownership joint_ownership) star stats(N)
+        keep(female_landowner sole_female_ownership joint_ownership *.saq01) ///
+        star stats(N)
     estimates table old_logit_a logit_a old_logit_b logit_b, ///
-        keep(female_landowner sole_female_ownership joint_ownership) star stats(N)
+        keep(female_landowner sole_female_ownership joint_ownership *.saq01) ///
+        star stats(N)
     estimates table old_sfi_a sfi_a old_sfi_b sfi_b, ///
-        keep(female_landowner sole_female_ownership joint_ownership) star stats(N)
+        keep(female_landowner sole_female_ownership joint_ownership *.saq01) ///
+        star stats(N)
 
 }

@@ -226,11 +226,23 @@ if (!all(own_vars %in% names(d))) {
   old_logit_b <- fit_old_logit("fies_dummy", own_b)
   message("Wald (previous moderate/severe FI)")
   wald_sole_eq_joint(old_logit_b, vcovHC(old_logit_b, type = "HC0"))
+  if (requireNamespace("marginaleffects", quietly = TRUE)) {
+    message("AME (previous moderate/severe FI, Spec A)")
+    print(marginaleffects::avg_slopes(old_logit_a, vcov = vcovHC(old_logit_a, type = "HC0")))
+    message("AME (previous moderate/severe FI, Spec B)")
+    print(marginaleffects::avg_slopes(old_logit_b, vcov = vcovHC(old_logit_b, type = "HC0")))
+  }
 
   old_sfi_a <- fit_old_logit("severe_fi", own_a)
   old_sfi_b <- fit_old_logit("severe_fi", own_b)
   message("Wald (previous severe FI)")
   wald_sole_eq_joint(old_sfi_b, vcovHC(old_sfi_b, type = "HC0"))
+  if (requireNamespace("marginaleffects", quietly = TRUE)) {
+    message("AME (previous severe FI, Spec A)")
+    print(marginaleffects::avg_slopes(old_sfi_a, vcov = vcovHC(old_sfi_a, type = "HC0")))
+    message("AME (previous severe FI, Spec B)")
+    print(marginaleffects::avg_slopes(old_sfi_b, vcov = vcovHC(old_sfi_b, type = "HC0")))
+  }
 
   #--------------------------------------------------------------------------
   # NEW: survey weights + EA cluster
@@ -271,6 +283,7 @@ if (!all(own_vars %in% names(d))) {
   cat("COMPARISON  n = ", nrow(d), " households. Previous = unweighted robust. New = ",
       wt, " + cluster ea_id.\n", sep = "")
   cat("OLS previous includes married (original do-file). Logits do not.\n")
+  cat("Region dummies (factor(saq01), Afar omitted) are in every model.\n")
   cat(strrep("=", 100), "\n", sep = "")
   cat(sprintf("%-28s %-22s %-22s\n", "", "PREVIOUS (robust)", "NEW (survey)"))
 
