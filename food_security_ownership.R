@@ -33,20 +33,29 @@
 library(haven)
 library(survey)
 
+# Outputs of ethiopia_landowner.do. Leave NULL to run without them.
+#   ownership_dta = female_ownership.dta -> the ownership dummies
+#   area_dta      = area_ethiopia.dta    -> sfi and total_land
 analysis_dta  <- "fies_household.dta"
 ownership_dta <- NULL
+area_dta      <- NULL
 
 d <- as.data.frame(zap_labels(read_dta(analysis_dta)))
 
-if (!is.null(ownership_dta)) {
-  own <- as.data.frame(zap_labels(read_dta(ownership_dta)))
-  keep <- intersect(
-    c("household_id", "female_landowner", "sole_female_ownership",
-      "joint_ownership", "sole_male_ownership", "sfi", "soil_fertility"),
-    names(own)
-  )
-  d <- merge(d, own[, keep], by = "household_id")
+# Columns are whitelisted, not merged wholesale: female_ownership.dta also
+# carries s2q05, s2q06 and s2q17 from the post-planting parcel roster, and
+# fies_household.dta already holds different variables under those same names
+# from the household education section.
+merge_keep <- function(d, path, vars) {
+  if (is.null(path)) return(d)
+  u <- as.data.frame(zap_labels(read_dta(path)))
+  merge(d, u[, intersect(c("household_id", vars), names(u))], by = "household_id")
 }
+
+d <- merge_keep(d, ownership_dta,
+                c("female_landowner", "sole_female_ownership", "joint_ownership",
+                  "sole_male_ownership", "number_plots_female", "soil_fertility"))
+d <- merge_keep(d, area_dta, c("sfi", "total_land"))
 
 #------------------------------------------------------------------------------
 # Design identifiers

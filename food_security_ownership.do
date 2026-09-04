@@ -34,13 +34,29 @@
 
 set more off
 
+* Outputs of ethiopia_landowner.do. Leave empty to run without them.
+*   ownership_dta = female_ownership.dta -> the ownership dummies
+*   area_dta      = area_ethiopia.dta    -> sfi and total_land
 global analysis_dta  "fies_household.dta"
 global ownership_dta ""
+global area_dta      ""
 
 use "$analysis_dta", clear
 
+* keepusing() is required, not optional: female_ownership.dta also carries
+* s2q05, s2q06 and s2q17 from the post-planting parcel roster, and
+* fies_household.dta already holds different variables under those same
+* names from the household education section.
 if `"$ownership_dta"' != "" {
-    merge 1:1 household_id using "$ownership_dta", keep(match) nogenerate
+    merge 1:1 household_id using "$ownership_dta", ///
+        keepusing(female_landowner sole_female_ownership joint_ownership ///
+                  sole_male_ownership number_plots_female soil_fertility) ///
+        keep(match) nogenerate
+}
+
+if `"$area_dta"' != "" {
+    merge 1:1 household_id using "$area_dta", ///
+        keepusing(sfi total_land) keep(match) nogenerate
 }
 
 
