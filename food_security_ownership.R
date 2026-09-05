@@ -39,7 +39,7 @@
 # N = 1,809 here (active_hh_member dependency on fies_household.dta).
 # The paper table N = 1,826 is correct for
 # ETH_2021_ESPS-W5_v01_M_Stata_1/codes/paper code/merge_ownership.do.
-# Rebuild it with replicate_paper_fies.R.
+# Rebuild it with paper_fies_1826.R / paper_fies_1826.do.
 
 library(haven)
 library(survey)
