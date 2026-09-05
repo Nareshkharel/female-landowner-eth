@@ -126,6 +126,12 @@ if _rc {
 }
 
 * Working-age members are the denominator, so households with none are missing.
+* This is not the same variable as female landowner analysis.do, which built
+* dependency_ratio = dependent / independent on the full roster (child < 15,
+* old > 64, working_age 15-64) and then kept heads. fies_household.dta is
+* heads only, so the roster counts are gone. Using active_hh_member instead
+* drops every household with no economically active member, including
+* elderly-headed households that the roster measure could still score.
 capture confirm numeric variable dependency_ratio
 if _rc {
     gen dependency_ratio = (household_size - active_hh_member) / active_hh_member ///
@@ -155,10 +161,28 @@ foreach v in sfi age basic_educ male_head dependency_ratio non_farm_enterprise /
 }
 
 * Casewise sample, so every model below is estimated on the same households.
+display as text _n "Attrition after ownership + area match (N = " _N ")"
+foreach v in sfi dependency_ratio soil_fertility {
+    capture confirm numeric variable `v'
+    if !_rc {
+        quietly count if missing(`v')
+        display as text "  missing `v': " r(N)
+    }
+}
+quietly count if missing(sfi) & !missing(dependency_ratio) & !missing(soil_fertility)
+display as text "  SFI only: " r(N)
+quietly count if !missing(sfi) & missing(dependency_ratio) & !missing(soil_fertility)
+display as text "  dependency only (active_hh_member==0): " r(N)
+quietly count if !missing(sfi) & !missing(dependency_ratio) & missing(soil_fertility)
+display as text "  soil fertility only: " r(N)
+display as text "  1,826 in the earlier food-security table used the roster " ///
+    "dependency ratio; this file cannot rebuild that measure."
+
 foreach v in $x {
     drop if missing(`v')
 }
 drop if missing(fies_score, $wt, psu)
+display as text "estimation sample: " _N
 
 svyset psu [pweight=$wt], singleunit(centered)
 

@@ -104,6 +104,9 @@ if (!"fies_score" %in% names(d)) {
 if (!"basic_educ" %in% names(d)) d$basic_educ <- d$basic_education
 
 # Working-age members are the denominator, so households with none are missing.
+# Not the same as female landowner analysis.do, which used
+# dependent / independent on the full roster (ages <15 / 15-64 / >64)
+# before keeping heads. fies_household.dta is heads only.
 if (!"dependency_ratio" %in% names(d)) {
   d$dependency_ratio <- ifelse(
     d$active_hh_member > 0,
@@ -128,6 +131,22 @@ if (length(dropped)) message("controls not in data, omitted: ",
                              paste(dropped, collapse = ", "))
 
 # Casewise sample, so every model below is estimated on the same households.
+attrit <- function(v) sum(is.na(d[[v]]))
+message("Attrition after ownership + area match (N = ", nrow(d), ")")
+for (v in intersect(c("sfi", "dependency_ratio", "soil_fertility"), names(d))) {
+  message("  missing ", v, ": ", attrit(v))
+}
+if (all(c("sfi", "dependency_ratio", "soil_fertility") %in% names(d))) {
+  message("  SFI only: ",
+          sum(is.na(d$sfi) & !is.na(d$dependency_ratio) & !is.na(d$soil_fertility)))
+  message("  dependency only (active_hh_member==0): ",
+          sum(!is.na(d$sfi) & is.na(d$dependency_ratio) & !is.na(d$soil_fertility)))
+  message("  soil fertility only: ",
+          sum(!is.na(d$sfi) & !is.na(d$dependency_ratio) & is.na(d$soil_fertility)))
+}
+message("  1,826 in the earlier food-security table used the roster ",
+        "dependency ratio; this file cannot rebuild that measure.")
+
 d <- d[complete.cases(d[, c(x, "fies_score", ".wt", "psu", "saq01")]), ]
 message("estimation sample: ", nrow(d), " households, ",
         length(unique(d$psu)), " clusters")
