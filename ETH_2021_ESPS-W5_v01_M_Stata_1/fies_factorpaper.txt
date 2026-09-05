@@ -1,0 +1,52 @@
+	(1)
+VARIABLES	FIES_factor
+	
+sfi	-0.104
+	(0.105)
+age	0.002
+	(0.001)
+basic_educ	-0.126***
+	(0.046)
+male_head	-0.020
+	(0.068)
+dependency_ratio	0.089***
+	(0.023)
+non_farm_enterprise	-0.095
+	(0.077)
+wealth_index	-0.092***
+	(0.022)
+female_landowner	-0.086*
+	(0.046)
+soil_fertility	-0.047
+	(0.037)
+drought_shock	0.497***
+	(0.063)
+married	-0.006
+	(0.069)
+total_land	-0.128***
+	(0.019)
+livestock_hh	-0.195**
+	(0.091)
+3.saq01	0.405***
+	(0.139)
+4.saq01	0.934***
+	(0.141)
+5.saq01	-0.062
+	(0.155)
+6.saq01	0.571***
+	(0.148)
+7.saq01	0.816***
+	(0.140)
+12.saq01	0.348**
+	(0.138)
+13.saq01	-0.070
+	(0.145)
+15.saq01	0.337**
+	(0.144)
+Constant	-0.234
+	(0.167)
+	
+Observations	1,826
+R-squared	0.210
+Robust standard errors in parentheses	
+*** p<0.01, ** p<0.05, * p<0.1	

@@ -1,0 +1,61 @@
+{\rtf1\fs24
+\trowd\trgaph75\trleft-75\intbl\trqc\clbrdrt\brdrs\cellx3168\clbrdrt\brdrs\cellx4608\clbrdrt\brdrs\cellx6048
+\ql \cell\qc (1)\cell\qc (2)\cell\row
+\trowd\trgaph75\trleft-75\trqc\cellx3168\cellx4608\cellx6048
+\trowd\trgaph75\trleft-75\trqc\clbrdrb\brdrs\cellx3168\clbrdrb\brdrs\cellx4608\clbrdrb\brdrs\cellx6048
+\ql VARIABLES\cell\qc SFI\cell\qc SFI\cell\row
+\trowd\trgaph75\trleft-75\trqc\cellx3168\cellx4608\cellx6048
+\ql \cell\qc \cell\qc \cell\row
+\ql sole_female_ownership\cell\qc \cell\qc -0.164\cell\row
+\ql \cell\qc \cell\qc (0.276)\cell\row
+\ql joint_ownership\cell\qc \cell\qc -0.613***\cell\row
+\ql \cell\qc \cell\qc (0.207)\cell\row
+\ql sfi\cell\qc -1.475***\cell\qc -1.463***\cell\row
+\ql \cell\qc (0.347)\cell\qc (0.347)\cell\row
+\ql age\cell\qc 0.006\cell\qc 0.006\cell\row
+\ql \cell\qc (0.005)\cell\qc (0.005)\cell\row
+\ql basic_educ\cell\qc -0.051\cell\qc -0.048\cell\row
+\ql \cell\qc (0.187)\cell\qc (0.188)\cell\row
+\ql male_head\cell\qc -0.510***\cell\qc -0.303\cell\row
+\ql \cell\qc (0.196)\cell\qc (0.237)\cell\row
+\ql dependency_ratio\cell\qc 0.091\cell\qc 0.087\cell\row
+\ql \cell\qc (0.079)\cell\qc (0.078)\cell\row
+\ql non_farm_enterprise\cell\qc 0.498*\cell\qc 0.493*\cell\row
+\ql \cell\qc (0.291)\cell\qc (0.288)\cell\row
+\ql wealth_index\cell\qc -0.625***\cell\qc -0.626***\cell\row
+\ql \cell\qc (0.158)\cell\qc (0.159)\cell\row
+\ql dist_admhq\cell\qc 1.344*\cell\qc 1.353*\cell\row
+\ql \cell\qc (0.697)\cell\qc (0.700)\cell\row
+\ql dist_road\cell\qc -0.019***\cell\qc -0.019***\cell\row
+\ql \cell\qc (0.007)\cell\qc (0.007)\cell\row
+\ql soil_fertility\cell\qc 0.072\cell\qc 0.064\cell\row
+\ql \cell\qc (0.126)\cell\qc (0.126)\cell\row
+\ql drought_shock\cell\qc 1.512***\cell\qc 1.519***\cell\row
+\ql \cell\qc (0.185)\cell\qc (0.187)\cell\row
+\ql 3.saq01\cell\qc 0.094\cell\qc 0.071\cell\row
+\ql \cell\qc (0.441)\cell\qc (0.437)\cell\row
+\ql 4.saq01\cell\qc 1.473***\cell\qc 1.454***\cell\row
+\ql \cell\qc (0.370)\cell\qc (0.366)\cell\row
+\ql 5.saq01\cell\qc -0.819**\cell\qc -0.827**\cell\row
+\ql \cell\qc (0.404)\cell\qc (0.402)\cell\row
+\ql 6.saq01\cell\qc -0.047\cell\qc -0.086\cell\row
+\ql \cell\qc (0.624)\cell\qc (0.626)\cell\row
+\ql 7.saq01\cell\qc 1.138***\cell\qc 1.122***\cell\row
+\ql \cell\qc (0.374)\cell\qc (0.372)\cell\row
+\ql 12.saq01\cell\qc -1.534**\cell\qc -1.509**\cell\row
+\ql \cell\qc (0.669)\cell\qc (0.666)\cell\row
+\ql 13.saq01\cell\qc -1.150**\cell\qc -1.149**\cell\row
+\ql \cell\qc (0.577)\cell\qc (0.573)\cell\row
+\ql 15.saq01\cell\qc -0.735\cell\qc -0.761\cell\row
+\ql \cell\qc (0.502)\cell\qc (0.501)\cell\row
+\ql female_landowner\cell\qc -0.492***\cell\qc \cell\row
+\ql \cell\qc (0.180)\cell\qc \cell\row
+\ql Constant\cell\qc -2.202***\cell\qc -2.355***\cell\row
+\ql \cell\qc (0.559)\cell\qc (0.567)\cell\row
+\ql \cell\qc \cell\qc \cell\row
+\trowd\trgaph75\trleft-75\trqc\trbrdrb\brdrs\clbrdrb\brdrs\cellx3168\clbrdrb\brdrs\cellx4608\clbrdrb\brdrs\cellx6048
+\ql Observations\cell\qc 1,826\cell\qc 1,826\cell\row
+\pard\qc
+Robust standard errors in parentheses\par
+*** p<0.01, ** p<0.05, * p<0.1\par
+}
