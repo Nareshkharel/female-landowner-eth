@@ -35,6 +35,14 @@
 *   PREVIOUS -- unweighted, vce(robust), matching female landowner analysis.do
 *               (OLS on fies_score also includes married).
 *   NEW      -- svyset with pweight and PSU cluster.
+*
+* Sample size
+*   This script on fies_household.dta gives N = 1,809 because it builds
+*   dependency_ratio from active_hh_member (heads-only file).
+*   The paper table (spec_paper.doc, N = 1,826) is the right number for
+*   ETH_2021_ESPS-W5_v01_M_Stata_1/codes/paper code/merge_ownership.do:
+*   roster dependency (dependent/independent on sect1) plus married,
+*   total_land and livestock_hh. Re-run that do-file, or replicate_paper_fies.R.
 ********************************************************************************
 
 set more off

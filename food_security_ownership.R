@@ -35,6 +35,11 @@
 #               female landowner analysis.do block: regress/logit, vce(robust);
 #               OLS on fies_score also includes married).
 #   NEW      -- pw_w5 / svwt weights, SEs clustered on ea_id.
+#
+# N = 1,809 here (active_hh_member dependency on fies_household.dta).
+# The paper table N = 1,826 is correct for
+# ETH_2021_ESPS-W5_v01_M_Stata_1/codes/paper code/merge_ownership.do.
+# Rebuild it with replicate_paper_fies.R.
 
 library(haven)
 library(survey)
