@@ -20,7 +20,12 @@
 * How to run (from the repository root, in Stata)
 *   do paper_fies_1826.do
 *
-* Change eth_root if the ETH folder is somewhere else.
+* If the ETH folder is on your Desktop, set eth_root to that path, e.g.
+*   global eth_root "C:\Users\YOURNAME\Desktop\paper analysis\ETH_2021_ESPS-W5_v01_M_Stata_1"
+*
+* Outputs
+*   paper_fies_1826.log          full Stata log
+*   paper_sample_1826.dta        the analysis sample (N = 1,826)
 ********************************************************************************
 
 clear all
@@ -106,6 +111,19 @@ if r(N) != 1826 {
 else {
     display as text "Paper sample N = 1,826"
 }
+
+display as text _n "OWNERSHIP COUNTS"
+tab female_landowner
+tab sole_female_ownership
+tab joint_ownership
+tab sole_female_ownership joint_ownership
+quietly count if female_landowner == 1 & sole_female_ownership == 1
+display as text "sole among any-female: " r(N)
+quietly count if female_landowner == 1 & joint_ownership == 1
+display as text "joint among any-female: " r(N)
+
+save "paper_sample_1826.dta", replace
+display as text "saved paper_sample_1826.dta"
 
 capture confirm numeric variable ea_id
 if !_rc {
@@ -228,5 +246,36 @@ else {
     display as text "no pw_w5/svwt in the file; survey block skipped"
 }
 
+display as text _n "============================================================"
+display as text "KEY OWNERSHIP RESULTS  N = " _N
+display as text "============================================================"
+foreach est in pap_ols_a pap_fi_a pap_sev_a {
+    quietly estimates restore `est'
+    display as text "`est' any female: " %7.3f _b[female_landowner] ///
+        " (" %6.3f _se[female_landowner] ")"
+}
+foreach est in pap_ols_b pap_fi_b pap_sev_b {
+    quietly estimates restore `est'
+    display as text "`est' sole: " %7.3f _b[sole_female_ownership] ///
+        " (" %6.3f _se[sole_female_ownership] ")" ///
+        "  joint: " %7.3f _b[joint_ownership] ///
+        " (" %6.3f _se[joint_ownership] ")"
+}
+if "$wt" != "" {
+    foreach est in svy_ols_a svy_fi_a svy_sev_a {
+        quietly estimates restore `est'
+        display as text "`est' any female: " %7.3f _b[female_landowner] ///
+            " (" %6.3f _se[female_landowner] ")"
+    }
+    foreach est in svy_ols_b svy_fi_b svy_sev_b {
+        quietly estimates restore `est'
+        display as text "`est' sole: " %7.3f _b[sole_female_ownership] ///
+            " (" %6.3f _se[sole_female_ownership] ")" ///
+            "  joint: " %7.3f _b[joint_ownership] ///
+            " (" %6.3f _se[joint_ownership] ")"
+    }
+}
+
 display as text _n "Done. Log: paper_fies_1826.log"
+display as text "Sample file: paper_sample_1826.dta"
 log close

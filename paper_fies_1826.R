@@ -19,9 +19,15 @@
 # How to run (from the repository root)
 #   Rscript paper_fies_1826.R
 #
+# If the ETH folder is on your Desktop, set eth_root to that path, e.g.
+#   eth_root <- "C:/Users/YOURNAME/Desktop/paper analysis/ETH_2021_ESPS-W5_v01_M_Stata_1"
+#
 # Packages: haven, sandwich, lmtest, survey, marginaleffects
 #
-# Change eth_root if the ETH folder is somewhere else.
+# Outputs
+#   paper_fies_1826_R.log        full R log
+#   paper_sample_1826.dta        the analysis sample (N = 1,826)
+#   paper_fies_1826_results.csv  compact ownership table
 
 suppressPackageStartupMessages({
   library(haven)
@@ -30,8 +36,14 @@ suppressPackageStartupMessages({
   library(survey)
 })
 
-sink("paper_fies_1826_R.log", split = TRUE)
-on.exit(sink(), add = TRUE)
+logf <- file("paper_fies_1826_R.log", open = "wt")
+sink(logf, split = TRUE)
+sink(logf, type = "message")
+on.exit({
+  sink(type = "message")
+  sink()
+  close(logf)
+}, add = TRUE)
 
 eth_root <- "ETH_2021_ESPS-W5_v01_M_Stata_1"
 if (!dir.exists(eth_root)) {
@@ -148,12 +160,34 @@ d <- d[complete.cases(d[, need]), ]
 if (nrow(d) != 1826) {
   warning("Expected N = 1,826, got ", nrow(d))
 } else {
-  message("Paper sample N = 1,826")
+  cat("Paper sample N = 1,826\n")
 }
+
+cat("\nOWNERSHIP COUNTS\n")
+print(table(any_female = d$female_landowner, useNA = "ifany"))
+print(table(sole = d$sole_female_ownership, joint = d$joint_ownership, useNA = "ifany"))
+cat(sprintf("sole among any-female: %d\n",
+            sum(d$female_landowner == 1 & d$sole_female_ownership == 1)))
+cat(sprintf("joint among any-female: %d\n",
+            sum(d$female_landowner == 1 & d$joint_ownership == 1)))
 
 d$psu <- if ("ea_id" %in% names(d)) as.integer(factor(d$ea_id)) else NA_integer_
 wt <- intersect(c("pw_w5", "svwt"), names(d))[1]
 if (!is.na(wt)) d$.wt <- as.numeric(d[[wt]])
+
+keep_cols <- unique(c(
+  "household_id", "ea_id", "psu", "saq01", wt,
+  "fies_score", "fies_dummy", "severe_fi",
+  "female_landowner", "sole_female_ownership", "joint_ownership",
+  "sole_male_ownership", x_paper
+))
+keep_cols <- intersect(keep_cols, names(d))
+d_out <- d[, keep_cols]
+if (is.factor(d_out$saq01)) {
+  d_out$saq01 <- as.integer(as.character(d_out$saq01))
+}
+write_dta(d_out, "paper_sample_1826.dta")
+cat("saved paper_sample_1826.dta\n")
 
 #------------------------------------------------------------------------------
 # 1. Summary statistics (summary_paper.txt)
@@ -262,10 +296,10 @@ if (!is.na(wt) && "psu" %in% names(d)) {
     print(marginaleffects::avg_slopes(svy_sev_b, newdata = ds, wts = ".wt"))
   }
 
-  message("\n", strrep("=", 90))
-  message("OWNERSHIP COMPARISON  paper N = ", nrow(d),
-          "  survey N = ", nrow(ds))
-  message(sprintf("%-28s %-22s %-22s", "", "PAPER (robust)", "NEW (survey)"))
+  cat("\n", strrep("=", 90), "\n", sep = "")
+  cat("OWNERSHIP COMPARISON  paper N = ", nrow(d),
+      "  survey N = ", nrow(ds), "\n", sep = "")
+  cat(sprintf("%-28s %-22s %-22s\n", "", "PAPER (robust)", "NEW (survey)"))
   rows <- list(
     list("FIES score, any female", pap_ols_a, "female_landowner", V_ols_a,
          svy_ols_a, "female_landowner", vcov(svy_ols_a)),
@@ -287,13 +321,86 @@ if (!is.na(wt) && "psu" %in% names(d)) {
          svy_sev_b, "joint_ownership", vcov(svy_sev_b))
   )
   for (r in rows) {
-    message(sprintf("%-28s %-22s %-22s", r[[1]],
-                    own_row(r[[2]], r[[3]], r[[4]]),
-                    own_row(r[[5]], r[[6]], r[[7]])))
+    cat(sprintf("%-28s %-22s %-22s\n", r[[1]],
+                own_row(r[[2]], r[[3]], r[[4]]),
+                own_row(r[[5]], r[[6]], r[[7]])))
   }
+
+  coef_row <- function(block, outcome, spec, term, model, V) {
+    b <- unname(coef(model)[term])
+    se <- sqrt(V[term, term])
+    p <- 2 * pnorm(-abs(b / se))
+    data.frame(block = block, outcome = outcome, spec = spec, term = term,
+               estimate = b, se = se, p = p, stringsAsFactors = FALSE)
+  }
+  ame_row <- function(block, outcome, spec, term, model, V, newdata = d, wts = NULL) {
+    if (!requireNamespace("marginaleffects", quietly = TRUE)) {
+      return(NULL)
+    }
+    sl <- if (is.null(wts)) {
+      marginaleffects::avg_slopes(model, vcov = V, variables = term)
+    } else {
+      marginaleffects::avg_slopes(model, newdata = newdata, wts = wts, variables = term)
+    }
+    data.frame(block = block, outcome = outcome, spec = spec,
+               term = paste0("AME:", term),
+               estimate = sl$estimate[1], se = sl$std.error[1], p = sl$p.value[1],
+               stringsAsFactors = FALSE)
+  }
+  wald_row <- function(block, outcome, spec, model, V) {
+    w <- wald_sole_eq_joint(model, V)
+    data.frame(block = block, outcome = outcome, spec = spec, term = "Wald sole=joint",
+               estimate = w$difference, se = w$se, p = w$p_value,
+               stringsAsFactors = FALSE)
+  }
+
+  res <- rbind(
+    coef_row("paper", "FIES score", "A", "female_landowner", pap_ols_a, V_ols_a),
+    coef_row("paper", "FIES score", "B", "sole_female_ownership", pap_ols_b, V_ols_b),
+    coef_row("paper", "FIES score", "B", "joint_ownership", pap_ols_b, V_ols_b),
+    wald_row("paper", "FIES score", "B", pap_ols_b, V_ols_b),
+    coef_row("paper", "Mod/sev FI logit", "A", "female_landowner", pap_fi_a, V_fi_a),
+    ame_row("paper", "Mod/sev FI AME", "A", "female_landowner", pap_fi_a, V_fi_a),
+    coef_row("paper", "Mod/sev FI logit", "B", "sole_female_ownership", pap_fi_b, V_fi_b),
+    coef_row("paper", "Mod/sev FI logit", "B", "joint_ownership", pap_fi_b, V_fi_b),
+    ame_row("paper", "Mod/sev FI AME", "B", "sole_female_ownership", pap_fi_b, V_fi_b),
+    ame_row("paper", "Mod/sev FI AME", "B", "joint_ownership", pap_fi_b, V_fi_b),
+    wald_row("paper", "Mod/sev FI logit", "B", pap_fi_b, V_fi_b),
+    coef_row("paper", "Severe FI logit", "A", "female_landowner", pap_sev_a, V_sev_a),
+    ame_row("paper", "Severe FI AME", "A", "female_landowner", pap_sev_a, V_sev_a),
+    coef_row("paper", "Severe FI logit", "B", "sole_female_ownership", pap_sev_b, V_sev_b),
+    coef_row("paper", "Severe FI logit", "B", "joint_ownership", pap_sev_b, V_sev_b),
+    ame_row("paper", "Severe FI AME", "B", "sole_female_ownership", pap_sev_b, V_sev_b),
+    ame_row("paper", "Severe FI AME", "B", "joint_ownership", pap_sev_b, V_sev_b),
+    wald_row("paper", "Severe FI logit", "B", pap_sev_b, V_sev_b),
+    coef_row("survey", "FIES score", "A", "female_landowner", svy_ols_a, vcov(svy_ols_a)),
+    coef_row("survey", "FIES score", "B", "sole_female_ownership", svy_ols_b, vcov(svy_ols_b)),
+    coef_row("survey", "FIES score", "B", "joint_ownership", svy_ols_b, vcov(svy_ols_b)),
+    wald_row("survey", "FIES score", "B", svy_ols_b, vcov(svy_ols_b)),
+    coef_row("survey", "Mod/sev FI logit", "A", "female_landowner", svy_fi_a, vcov(svy_fi_a)),
+    ame_row("survey", "Mod/sev FI AME", "A", "female_landowner", svy_fi_a, vcov(svy_fi_a), ds, ".wt"),
+    coef_row("survey", "Mod/sev FI logit", "B", "sole_female_ownership", svy_fi_b, vcov(svy_fi_b)),
+    coef_row("survey", "Mod/sev FI logit", "B", "joint_ownership", svy_fi_b, vcov(svy_fi_b)),
+    ame_row("survey", "Mod/sev FI AME", "B", "sole_female_ownership", svy_fi_b, vcov(svy_fi_b), ds, ".wt"),
+    ame_row("survey", "Mod/sev FI AME", "B", "joint_ownership", svy_fi_b, vcov(svy_fi_b), ds, ".wt"),
+    wald_row("survey", "Mod/sev FI logit", "B", svy_fi_b, vcov(svy_fi_b)),
+    coef_row("survey", "Severe FI logit", "A", "female_landowner", svy_sev_a, vcov(svy_sev_a)),
+    ame_row("survey", "Severe FI AME", "A", "female_landowner", svy_sev_a, vcov(svy_sev_a), ds, ".wt"),
+    coef_row("survey", "Severe FI logit", "B", "sole_female_ownership", svy_sev_b, vcov(svy_sev_b)),
+    coef_row("survey", "Severe FI logit", "B", "joint_ownership", svy_sev_b, vcov(svy_sev_b)),
+    ame_row("survey", "Severe FI AME", "B", "sole_female_ownership", svy_sev_b, vcov(svy_sev_b), ds, ".wt"),
+    ame_row("survey", "Severe FI AME", "B", "joint_ownership", svy_sev_b, vcov(svy_sev_b), ds, ".wt"),
+    wald_row("survey", "Severe FI logit", "B", svy_sev_b, vcov(svy_sev_b))
+  )
+  res$star <- ifelse(res$p < 0.01, "***",
+                     ifelse(res$p < 0.05, "**",
+                            ifelse(res$p < 0.1, "*", "")))
+  write.csv(res, "paper_fies_1826_results.csv", row.names = FALSE)
+  cat("\nCOMPACT RESULTS (also paper_fies_1826_results.csv)\n")
+  print(res, row.names = FALSE, digits = 3)
 } else {
-  message("no pw_w5/svwt or ea_id; survey block skipped")
+  cat("no pw_w5/svwt or ea_id; survey block skipped\n")
 }
 
-message("\nDone. Targets: N=1826; FI any-female logit -0.264 (0.122), AME -0.052 (0.024);")
-message("severe any-female logit -0.399 (0.187), AME -0.037 (0.017).")
+cat("\nDone. Targets: N=1826; FI any-female logit -0.264 (0.122), AME -0.052 (0.024);\n")
+cat("severe any-female logit -0.399 (0.187), AME -0.037 (0.017).\n")
