@@ -16,10 +16,11 @@
 #   5. Survey-weighted, EA-clustered versions of the same models
 #      (pw_w5, cluster ea_id) on households that have a weight.
 #
-# How to run (from the repository root)
+# How to run
+#   Set eth_root below if auto-search misses the data, then:
 #   Rscript paper_fies_1826.R
 #
-# If the ETH folder is on your Desktop, set eth_root to that path, e.g.
+# The folder you want is the one that contains merged_w_fies.dta, e.g.
 #   eth_root <- "C:/Users/YOURNAME/Desktop/paper analysis/ETH_2021_ESPS-W5_v01_M_Stata_1"
 #
 # Packages: haven, sandwich, lmtest, survey, marginaleffects
@@ -45,10 +46,36 @@ on.exit({
   close(logf)
 }, add = TRUE)
 
-eth_root <- "ETH_2021_ESPS-W5_v01_M_Stata_1"
-if (!dir.exists(eth_root)) {
-  stop("Cannot find ", eth_root, ". Set eth_root to the ETH folder.")
+# Leave "" to auto-search. Set a full path if R cannot find the ETH folder.
+eth_root <- ""
+# eth_root <- "C:/Users/nk11022/Desktop/paper analysis/ETH_2021_ESPS-W5_v01_M_Stata_1"
+
+user <- Sys.getenv("USERNAME", unset = Sys.getenv("USER", unset = ""))
+cand <- c(
+  eth_root,
+  "ETH_2021_ESPS-W5_v01_M_Stata_1",
+  file.path(getwd(), "ETH_2021_ESPS-W5_v01_M_Stata_1"),
+  getwd(),
+  file.path("C:/Users", user, "Desktop/paper analysis/ETH_2021_ESPS-W5_v01_M_Stata_1"),
+  file.path("C:/Users", user, "Desktop/ETH_2021_ESPS-W5_v01_M_Stata_1"),
+  "C:/Users/nk11022/Desktop/paper analysis/ETH_2021_ESPS-W5_v01_M_Stata_1"
+)
+eth_root <- ""
+for (p in unique(cand[nzchar(cand)])) {
+  if (file.exists(file.path(p, "merged_w_fies.dta"))) {
+    eth_root <- p
+    break
+  }
 }
+if (!nzchar(eth_root)) {
+  stop(
+    "Cannot find merged_w_fies.dta.\n",
+    "Working directory is: ", getwd(), "\n",
+    "Set eth_root to the ETH_2021_ESPS-W5_v01_M_Stata_1 folder ",
+    "(the folder that contains merged_w_fies.dta)."
+  )
+}
+cat("Using ETH folder: ", eth_root, "\n", sep = "")
 
 rd <- function(...) {
   as.data.frame(zap_labels(read_dta(file.path(eth_root, ...))))

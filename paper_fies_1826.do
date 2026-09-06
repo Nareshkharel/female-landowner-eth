@@ -17,14 +17,17 @@
 *   5. Survey-weighted, EA-clustered versions of the same models
 *      (pw_w5, cluster ea_id) on the households that have a weight.
 *
-* How to run (from the repository root, in Stata)
-*   do paper_fies_1826.do
+* How to run
+*   In the Stata Command window, first cd to the folder that holds
+*   merged_w_fies.dta, OR set eth_root below to that full Windows path.
+*   Then Do this file (Do not rely on a relative ETH_... path; the
+*   do-file editor often runs a Temp copy, so relative paths fail).
 *
-* If the ETH folder is on your Desktop, set eth_root to that path, e.g.
-*   global eth_root "C:\Users\YOURNAME\Desktop\paper analysis\ETH_2021_ESPS-W5_v01_M_Stata_1"
+*   cd "C:\Users\YOURNAME\Desktop\paper analysis\ETH_2021_ESPS-W5_v01_M_Stata_1"
+*   do "C:\path\to\female-landowner-eth\paper_fies_1826.do"
 *
 * Outputs
-*   paper_fies_1826.log          full Stata log
+*   paper_fies_1826.log          full Stata log (in the working directory)
 *   paper_sample_1826.dta        the analysis sample (N = 1,826)
 ********************************************************************************
 
@@ -33,17 +36,82 @@ set more off
 capture log close
 log using "paper_fies_1826.log", replace text
 
-* Folder that holds merged_w_fies.dta, female_ownership.dta, area_ethiopia.dta, ...
-global eth_root "ETH_2021_ESPS-W5_v01_M_Stata_1"
+display as text "Working directory is: `c(pwd)'"
+display as text "Windows user:         `c(username)'"
 
-capture confirm file "$eth_root/merged_w_fies.dta"
-if _rc {
-    display as error "Cannot find $eth_root/merged_w_fies.dta"
-    display as error "Set eth_root to the ETH_2021_ESPS-W5_v01_M_Stata_1 folder."
+*------------------------------------------------------------------------------
+* >>> EDIT if auto-search misses your data <<<
+* Folder that contains merged_w_fies.dta (full path, in quotes).
+* Leave empty to search common locations.
+*------------------------------------------------------------------------------
+global eth_root ""
+* global eth_root "C:\Users\nk11022\Desktop\paper analysis\ETH_2021_ESPS-W5_v01_M_Stata_1"
+
+* Already-built analysis sample (optional). If ETH data are missing but
+* this file exists, the script skips the merges and runs the models.
+global analysis_dta ""
+* global analysis_dta "C:\Users\nk11022\Desktop\paper analysis\paper_sample_1826.dta"
+
+local p1 `"$eth_root"'
+local p2 `"`c(pwd)'"'
+local p3 `"`c(pwd)'/ETH_2021_ESPS-W5_v01_M_Stata_1"'
+local p4 `"ETH_2021_ESPS-W5_v01_M_Stata_1"'
+local p5 `"C:\Users\`c(username)'\Desktop\paper analysis\ETH_2021_ESPS-W5_v01_M_Stata_1"'
+local p6 `"C:\Users\`c(username)'\Desktop\ETH_2021_ESPS-W5_v01_M_Stata_1"'
+local p7 `"C:\Users\nk11022\Desktop\paper analysis\ETH_2021_ESPS-W5_v01_M_Stata_1"'
+
+global found_eth 0
+forvalues i = 1/7 {
+    if `"`p`i''"' != "" {
+        capture confirm file `"`p`i''/merged_w_fies.dta"'
+        if !_rc {
+            global eth_root `"`p`i''"'
+            global found_eth 1
+            continue, break
+        }
+    }
+}
+
+local a1 `"$analysis_dta"'
+local a2 `"`c(pwd)'/paper_sample_1826.dta"'
+local a3 `"paper_sample_1826.dta"'
+global found_sample 0
+forvalues i = 1/3 {
+    if `"`a`i''"' != "" {
+        capture confirm file `"`a`i''"'
+        if !_rc {
+            global analysis_dta `"`a`i''"'
+            global found_sample 1
+            continue, break
+        }
+    }
+}
+
+if $found_eth {
+    display as text "Using ETH folder: $eth_root"
+}
+else if $found_sample {
+    display as text "ETH folder not found; using saved sample: $analysis_dta"
+}
+else {
+    display as error "Cannot find merged_w_fies.dta"
+    display as error "Stata working directory is: `c(pwd)'"
+    display as error "The do-file editor runs a Temp copy, so ETH_2021_... as a"
+    display as error "relative path will not work. Do ONE of these:"
+    display as error "  1. In the Command window:  cd to the ETH folder, then Do again"
+    display as error `"  2. Edit this file:  global eth_root "C:\full\path\ETH_2021_ESPS-W5_v01_M_Stata_1""'
+    display as error "The ETH folder is the one that contains merged_w_fies.dta"
+    display as error "and Household\female_ownership.dta."
     exit 601
 }
 
 
+* Same regressors as spec_paper (no distances).
+global x_paper sfi age basic_educ male_head dependency_ratio ///
+    non_farm_enterprise wealth_index soil_fertility drought_shock ///
+    married total_land livestock_hh
+
+if $found_eth {
 *------------------------------------------------------------------------------
 * Sample: same inner merges and drops as the paper do-file
 *------------------------------------------------------------------------------
@@ -55,10 +123,19 @@ merge 1:1 household_id using "$eth_root/hh_14.dta",       keep(match) nogenerate
 merge 1:1 household_id using "$eth_root/hh11_w5_pca.dta", keep(match) nogenerate
 merge 1:1 household_id using "$eth_root/fies_dta.dta",    keep(match) nogenerate
 
-merge 1:1 household_id using "$eth_root/Household/female_ownership.dta", ///
-    keepusing(female_landowner sole_female_ownership joint_ownership ///
-              sole_male_ownership soil_fertility farm_type) ///
-    keep(match) nogenerate
+capture confirm file "$eth_root/Household/female_ownership.dta"
+if !_rc {
+    merge 1:1 household_id using "$eth_root/Household/female_ownership.dta", ///
+        keepusing(female_landowner sole_female_ownership joint_ownership ///
+                  sole_male_ownership soil_fertility farm_type) ///
+        keep(match) nogenerate
+}
+else {
+    merge 1:1 household_id using "$eth_root/female_ownership.dta", ///
+        keepusing(female_landowner sole_female_ownership joint_ownership ///
+                  sole_male_ownership soil_fertility farm_type) ///
+        keep(match) nogenerate
+}
 
 capture confirm file "$eth_root/Household_geographical.dta"
 if !_rc {
@@ -86,22 +163,30 @@ drop if missing(dependency_ratio)
 drop if missing(soil_fertility)
 drop if missing(sfi)
 
-gen fies_dummy = (fies_score >= 4) if !missing(fies_score)
-gen severe_fi  = (fies_score > 6)  if !missing(fies_score)
+capture confirm numeric variable fies_dummy
+if _rc {
+    gen fies_dummy = (fies_score >= 4) if !missing(fies_score)
+}
+capture confirm numeric variable severe_fi
+if _rc {
+    gen severe_fi  = (fies_score > 6)  if !missing(fies_score)
+}
 * Paper coding: crop-only or mixed (farm_type 1 or 3), not livestock-only.
-gen livestock_hh = (farm_type == 1 | farm_type == 3) if !missing(farm_type)
+capture confirm numeric variable livestock_hh
+if _rc {
+    gen livestock_hh = (farm_type == 1 | farm_type == 3) if !missing(farm_type)
+}
 
 label var fies_dummy   "1 = moderate or severe FI (FIES >= 4)"
 label var severe_fi    "1 = severe FI (FIES > 6)"
 label var livestock_hh "1 = farm_type crop-only or mixed (paper coding)"
 
-* Same regressors as spec_paper (no distances).
-global x_paper sfi age basic_educ male_head dependency_ratio ///
-    non_farm_enterprise wealth_index soil_fertility drought_shock ///
-    married total_land livestock_hh
-
 foreach v in $x_paper female_landowner sole_female_ownership joint_ownership saq01 {
     drop if missing(`v')
+}
+} else {
+    use "$analysis_dta", clear
+    display as text "Loaded saved analysis sample"
 }
 
 count
@@ -122,21 +207,26 @@ display as text "sole among any-female: " r(N)
 quietly count if female_landowner == 1 & joint_ownership == 1
 display as text "joint among any-female: " r(N)
 
-save "paper_sample_1826.dta", replace
-display as text "saved paper_sample_1826.dta"
-
-capture confirm numeric variable ea_id
-if !_rc {
-    egen psu = group(ea_id)
-}
-else {
-    egen psu = group(saq01 saq02 saq03 saq04 saq05 saq06)
+capture confirm numeric variable psu
+if _rc {
+    capture confirm numeric variable ea_id
+    if !_rc {
+        egen psu = group(ea_id)
+    }
+    else {
+        egen psu = group(saq01 saq02 saq03 saq04 saq05 saq06)
+    }
 }
 
 global wt ""
 foreach v in pw_w5 svwt {
     capture confirm numeric variable `v'
     if !_rc & "$wt" == "" global wt `v'
+}
+
+if $found_eth {
+    save "paper_sample_1826.dta", replace
+    display as text "saved paper_sample_1826.dta"
 }
 
 
