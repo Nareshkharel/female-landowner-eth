@@ -15,6 +15,7 @@ Four tables: female landowner x {FI, Sev FI}, sole/joint x {FI, Sev FI}.
 """
 from __future__ import annotations
 
+import argparse
 import io
 import re
 import zipfile
@@ -458,12 +459,19 @@ def make_note(text: str) -> ET.Element:
     return p
 
 
-NOTE = (
+NOTE_EA = (
     "Notes: Average marginal effects from survey-weighted logits (pw_w5, clustered at the EA). "
     "Column (1) includes only the ownership variable. Column (2) adds household controls, without region dummies. "
     "Column (3) adds region dummies (saq01). Standard errors in parentheses. "
     "*** p<0.01, ** p<0.05, * p<0.1."
 )
+NOTE_HH = (
+    "Notes: Average marginal effects from survey-weighted logits (pw_w5, clustered at the household). "
+    "Column (1) includes only the ownership variable. Column (2) adds household controls, without region dummies. "
+    "Column (3) adds region dummies (saq01). Standard errors in parentheses. "
+    "*** p<0.01, ** p<0.05, * p<0.1."
+)
+NOTE = NOTE_EA
 
 TABLES = [
     ("Table 1. Female landowner and moderate or severe food insecurity", "fies_dummy", "any", "FI"),
@@ -473,7 +481,9 @@ TABLES = [
 ]
 
 
-def write_docx(models: dict) -> None:
+def write_docx(models: dict, out_path: Path | None = None, note: str | None = None) -> Path:
+    dest = Path(out_path) if out_path is not None else OUT_PATH
+    foot = note if note is not None else NOTE
     with zipfile.ZipFile(TEMPLATE) as zin:
         xml = zin.read("word/document.xml")
         other = {name: zin.read(name) for name in zin.namelist() if name != "word/document.xml"}
@@ -488,7 +498,7 @@ def write_docx(models: dict) -> None:
     for title, outcome, family, olabel in TABLES:
         body.append(make_title(title))
         body.append(build_table(models, outcome, family, olabel))
-        body.append(make_note(NOTE))
+        body.append(make_note(foot))
     body.append(sectPr)
 
     buf = io.BytesIO()
@@ -497,10 +507,11 @@ def write_docx(models: dict) -> None:
         b"<?xml version='1.0' encoding='UTF-8'?>",
         b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
     )
-    with zipfile.ZipFile(OUT_PATH, "w", compression=zipfile.ZIP_DEFLATED) as zout:
+    with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as zout:
         for name, data in other.items():
             zout.writestr(name, data)
         zout.writestr("word/document.xml", doc_xml)
+    return dest
 
 
 def print_preview(models: dict) -> None:
@@ -532,11 +543,50 @@ def print_preview(models: dict) -> None:
             )
 
 
+def fill_missing_from_estimates(models: dict) -> dict:
+    """If the log omitted own-only / no-region AMEs, estimate them."""
+    required = [
+        ("fies_dummy", "any", "own"),
+        ("fies_dummy", "any", "noreg"),
+        ("fies_dummy", "decomp", "own"),
+        ("fies_dummy", "decomp", "noreg"),
+        ("severe_fi", "any", "own"),
+        ("severe_fi", "any", "noreg"),
+        ("severe_fi", "decomp", "own"),
+        ("severe_fi", "decomp", "noreg"),
+    ]
+    if all(k in models for k in required):
+        return models
+    from estimate_hhcluster_ames import estimate_all
+
+    print("Estimating missing own-only / no-region AMEs (hh-cluster survey)")
+    est = estimate_all()
+    for key, val in est.items():
+        if key not in models:
+            models[key] = val
+    return models
+
+
 def main() -> None:
-    models = parse_ames(LOG_PATH.read_text(encoding="utf-8", errors="replace"))
+    p = argparse.ArgumentParser(description="Build format-reference AME tables from a Stata log")
+    p.add_argument("--log", default=str(LOG_PATH))
+    p.add_argument("--out", default=str(OUT_PATH))
+    p.add_argument(
+        "--cluster",
+        choices=("ea", "household"),
+        default="ea",
+        help="Wording in the table notes; household also fills missing specs",
+    )
+    args = p.parse_args()
+    models = parse_ames(Path(args.log).read_text(encoding="utf-8", errors="replace"))
+    if args.cluster == "household":
+        models = fill_missing_from_estimates(models)
+        note = NOTE_HH
+    else:
+        note = NOTE_EA
     print_preview(models)
-    write_docx(models)
-    print("wrote", OUT_PATH)
+    dest = write_docx(models, out_path=Path(args.out), note=note)
+    print("wrote", dest)
 
 
 if __name__ == "__main__":
