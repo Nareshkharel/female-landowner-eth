@@ -1,0 +1,2693 @@
+-----------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\Users\nk11022\Desktop\paper analysis\paper analysis\ETH_2021_ESPS-W5_v01_
+> M_Stata_1\paper_fies_1826_easyform.log
+  log type:  text
+ opened on:  11 Sep 2026, 14:54:33
+
+. 
+. display as text "Stata working directory: `c(pwd)'"
+Stata working directory: C:\Users\nk11022\Desktop\paper analysis\paper analysis\ETH_2021_
+> ESPS-W5_v01_M_Stata_1
+
+. display as text "Windows user name:       `c(username)'"
+Windows user name:       nk11022
+
+. 
+. 
+. ********************************************************************************
+. * STEP 1.  Folder that holds your data
+. *
+. * Edit this one line if your ETH folder is somewhere else.
+. * The folder must contain merged_w_fies.dta
+. ********************************************************************************
+. 
+. global eth_root "C:\Users\nk11022\Desktop\paper analysis\paper analysis\ETH_2021_ESPS-W
+> 5_v01_M_Stata_1"
+
+. 
+. * Optional: point straight at a saved analysis sample.
+. * Leave empty to let the do-file look in eth_root and the working directory.
+. global analysis_dta ""
+
+. * global analysis_dta "C:\Users\nk11022\Desktop\paper analysis\ETH_2021_ESPS-W5_v01_M_S
+> tata_1\paper_sample_1826.dta"
+. 
+. 
+. ********************************************************************************
+. * STEP 2.  Load the sample
+. *
+. * Prefer paper_sample_1826.dta if it already exists (faster).
+. * Otherwise merge the ETH files the same way as paper_fies_1826.do
+. ********************************************************************************
+. 
+. * Look for a ready-made sample in three places
+. capture confirm file "$analysis_dta"
+
+. if _rc {
+.     capture confirm file "$eth_root/paper_sample_1826.dta"
+.     if !_rc global analysis_dta "$eth_root/paper_sample_1826.dta"
+. }
+
+. capture confirm file "$analysis_dta"
+
+. if _rc {
+.     capture confirm file "paper_sample_1826.dta"
+.     if !_rc global analysis_dta "paper_sample_1826.dta"
+. }
+
+. 
+. capture confirm file "$analysis_dta"
+
+. if !_rc {
+.     display as text "Loading saved sample: $analysis_dta"
+Loading saved sample: C:\Users\nk11022\Desktop\paper analysis\paper analysis\ETH_2021_ESP
+> S-W5_v01_M_Stata_1/paper_sample_1826.dta
+.     use "$analysis_dta", clear
+(Ethiopia Socioeconomic Survey Section 1 - Household Roster)
+. }
+
+. else {
+.     display as text "No saved sample. Building it from: $eth_root"
+. 
+.     capture confirm file "$eth_root/merged_w_fies.dta"
+.     if _rc {
+.         display as error "Cannot find $eth_root/merged_w_fies.dta"
+.         display as error "Edit Step 1 so eth_root is the folder that contains merged_w_
+> fies.dta."
+.         display as error "Example:"
+.         display as error `"  global eth_root "C:\Users\nk11022\Desktop\paper analysis\E
+> TH_2021_ESPS-W5_v01_M_Stata_1""'
+.         exit 601
+.     }
+. 
+.     * Keep only households that appear in every file (inner merge)
+.     * merged_w_fies: household heads, roster dependency ratio, education, FIES items
+.     use "$eth_root/merged_w_fies.dta", clear
+. 
+.     * drought_shock
+.     merge 1:1 household_id using "$eth_root/hh_9_w5.dta",     keep(match) nogenerate
+.     * non_farm_enterprise
+.     merge 1:1 household_id using "$eth_root/hh_12a_w5.dta",   keep(match) nogenerate
+.     merge 1:1 household_id using "$eth_root/hh_14.dta",       keep(match) nogenerate
+.     * wealth_index
+.     merge 1:1 household_id using "$eth_root/hh11_w5_pca.dta", keep(match) nogenerate
+.     * FIES score
+.     merge 1:1 household_id using "$eth_root/fies_dta.dta",    keep(match) nogenerate
+. 
+.     * Ownership only (names such as s2q05 collide with education variables)
+.     capture confirm file "$eth_root/Household/female_ownership.dta"
+.     if !_rc {
+.         merge 1:1 household_id using "$eth_root/Household/female_ownership.dta", ///
+>             keepusing(female_landowner sole_female_ownership joint_ownership ///
+>                       sole_male_ownership soil_fertility farm_type) ///
+>             keep(match) nogenerate
+.     }
+.     else {
+.         merge 1:1 household_id using "$eth_root/female_ownership.dta", ///
+>             keepusing(female_landowner sole_female_ownership joint_ownership ///
+>                       sole_male_ownership soil_fertility farm_type) ///
+>             keep(match) nogenerate
+.     }
+. 
+.     * Distances are merged so the sample matches the paper, but they are not used
+.     capture confirm file "$eth_root/Household_geographical.dta"
+.     if !_rc {
+.         merge 1:1 household_id using "$eth_root/Household_geographical.dta", ///
+>             keepusing(dist_admhq dist_road) keep(match) nogenerate
+.     }
+.     else {
+.         merge 1:1 household_id using "$eth_root/household_geographical.dta", ///
+>             keepusing(dist_admhq dist_road) keep(match) nogenerate
+.     }
+. 
+.     merge 1:1 household_id using "$eth_root/hdds_ethiopia.dta", keep(match) nogenerate
+.     * sfi and total_land
+.     merge 1:1 household_id using "$eth_root/area_ethiopia.dta", ///
+>         keepusing(sfi total_land) keep(match) nogenerate
+.     merge 1:1 household_id using "$eth_root/agri_practices.dta", keep(match) nogenerate
+. 
+.     * FIES raw score = count of the 8 yes/no items
+.     capture confirm numeric variable fies_score
+.     if _rc {
+.         gen fies_score = worried + healthy + fewfoods + skipped ///
+>                        + ateless + wholeday + ranout + hungry
+.     }
+. 
+.     * Same drops as the paper
+.     drop if missing(fies_score) | fies_score > 8
+.     drop if missing(dependency_ratio)
+.     drop if missing(soil_fertility)
+.     drop if missing(sfi)
+. 
+.     save "paper_sample_1826.dta", replace
+.     display as text "Saved paper_sample_1826.dta in the working directory"
+. }
+
+. 
+. count
+  1,826
+
+. display as text "Households now in memory: " r(N)
+Households now in memory: 1826
+
+. 
+. 
+. ********************************************************************************
+. * STEP 3.  Outcomes, controls, cluster, weight
+. ********************************************************************************
+. 
+. * Moderate or severe food insecurity: FIES score 4 or higher
+. capture confirm numeric variable fies_dummy
+
+. if _rc gen fies_dummy = (fies_score >= 4) if !missing(fies_score)
+
+. 
+. * Severe food insecurity: FIES score 7 or 8
+. capture confirm numeric variable severe_fi
+
+. if _rc gen severe_fi = (fies_score > 6) if !missing(fies_score)
+
+. 
+. * Paper coding: crop-only (1) or mixed (3). This is not livestock-only.
+. capture confirm numeric variable livestock_hh
+
+. if _rc gen livestock_hh = (farm_type == 1 | farm_type == 3) if !missing(farm_type)
+
+. 
+. label var fies_dummy   "1 = moderate or severe FI (FIES >= 4)"
+
+. label var severe_fi    "1 = severe FI (FIES > 6)"
+
+. label var livestock_hh "1 = crop-only or mixed farm (paper coding)"
+
+. 
+. * Controls used in every regression. Region dummies are added as i.saq01
+. global x_paper sfi age basic_educ male_head dependency_ratio ///
+>     non_farm_enterprise wealth_index soil_fertility drought_shock ///
+>     married total_land livestock_hh
+
+. 
+. * Drop remaining missing values on the regressors
+. foreach v in $x_paper female_landowner sole_female_ownership joint_ownership saq01 {
+  2.     capture confirm variable `v'
+  3.     if !_rc drop if missing(`v')
+  4. }
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+(0 observations deleted)
+
+. 
+. count
+  1,826
+
+. if r(N) == 1826 {
+.     display as text "Paper sample N = 1,826  (this is the correct paper N)"
+Paper sample N = 1,826  (this is the correct paper N)
+. }
+
+. else {
+.     display as error "Expected N = 1,826, got " r(N)
+. }
+
+. 
+. display as text _n "Who owns land in this sample?"
+
+Who owns land in this sample?
+
+. tab female_landowner
+
+   at least |
+ one female |
+         in |
+  household |
+  owns land |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        910       49.84       49.84
+          1 |        916       50.16      100.00
+------------+-----------------------------------
+      Total |      1,826      100.00
+
+. tab sole_female_ownership joint_ownership
+
+ 1= female |
+   is sole |
+  owner of |
+all plots, | 1= plots are jointly
+0=otherwis |  owned, 0=otherwise
+         e |         0          1 |     Total
+-----------+----------------------+----------
+         0 |       910        668 |     1,578 
+         1 |       248          0 |       248 
+-----------+----------------------+----------
+     Total |     1,158        668 |     1,826 
+
+. quietly count if female_landowner == 1 & sole_female_ownership == 1
+
+. display as text "Sole female owners: " r(N)
+Sole female owners: 248
+
+. quietly count if female_landowner == 1 & joint_ownership == 1
+
+. display as text "Joint owners:       " r(N)
+Joint owners:       668
+
+. 
+. * Enumeration area = PSU for clustering
+. capture confirm numeric variable psu
+
+. if _rc {
+.     capture confirm numeric variable ea_id
+.     if !_rc egen psu = group(ea_id)
+.     else    egen psu = group(saq01 saq02 saq03 saq04 saq05 saq06)
+. }
+
+. 
+. * Survey weight: Wave 5 household weight
+. global wt ""
+
+. capture confirm numeric variable pw_w5
+
+. if !_rc global wt pw_w5
+
+. if "$wt" == "" {
+.     capture confirm numeric variable svwt
+.     if !_rc global wt svwt
+. }
+
+. if "$wt" != "" display as text "Weight variable: $wt"
+Weight variable: pw_w5
+
+. else           display as text "No pw_w5/svwt found; survey models will be skipped"
+
+. 
+. 
+. ********************************************************************************
+. * STEP 4.  Summary statistics
+. *          Compare this block to summary_paper.txt
+. ********************************************************************************
+. 
+. display as text _n "===== STEP 4. Summary statistics ====="
+
+===== STEP 4. Summary statistics =====
+
+. summarize fies_dummy severe_fi sfi age basic_educ male_head ///
+>     dependency_ratio non_farm_enterprise wealth_index female_landowner ///
+>     soil_fertility drought_shock married total_land livestock_hh
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+  fies_dummy |      1,826    .3696605     .482845          0          1
+   severe_fi |      1,826    .1276013    .3337367          0          1
+         sfi |      1,826    .5343316    .3042028          0   .9479492
+         age |      1,826    45.89704    14.45129         16         97
+  basic_educ |      1,826    .4403067    .4965599          0          1
+-------------+---------------------------------------------------------
+   male_head |      1,826    .7661555    .4233904          0          1
+dependency~o |      1,826    1.003679    .9070524          0          6
+non_farm_e~e |      1,826    .0695509    .2544584          0          1
+wealth_index |      1,826    .0148836    1.015189  -.8388463   13.41452
+female_lan~r |      1,826    .5016429    .5001343          0          1
+-------------+---------------------------------------------------------
+soil_ferti~y |      1,826    2.288129    .6264483          1          3
+drought_sh~k |      1,826    .2201533    .4144634          0          1
+     married |      1,826    .8192771    .3848938          0          1
+  total_land |      1,826    .8337211    1.099518    .000019    12.1986
+livestock_hh |      1,826    .8630887    .3438478          0          1
+
+. 
+. 
+. ********************************************************************************
+. * STEP 5.  PREVIOUS MODELS
+. *          Unweighted logit / OLS with Huber-White SEs:  vce(robust)
+. *          These numbers match specpaper_coef.txt and spec_paper.txt
+. *
+. *          Spec A: one dummy, female_landowner
+. *          Spec B: two dummies, sole_female_ownership and joint_ownership
+. *                  then Wald test  H0: sole = joint
+. ********************************************************************************
+. 
+. display as text _n "===== STEP 5. Previous models: vce(robust) ====="
+
+===== STEP 5. Previous models: vce(robust) =====
+
+. 
+. * ----- 5a. Moderate or severe FI, Spec A (any female owner) -----
+. display as text _n "5a. Logit, moderate/severe FI, any female owner"
+
+5a. Logit, moderate/severe FI, any female owner
+
+. logit fies_dummy female_landowner $x_paper i.saq01, vce(robust)
+
+Iteration 0:   log pseudolikelihood = -1202.9226  
+Iteration 1:   log pseudolikelihood = -1048.5491  
+Iteration 2:   log pseudolikelihood = -1044.0994  
+Iteration 3:   log pseudolikelihood = -1044.0852  
+Iteration 4:   log pseudolikelihood = -1044.0852  
+
+Logistic regression                                     Number of obs =  1,826
+                                                        Wald chi2(21) = 248.27
+                                                        Prob > chi2   = 0.0000
+Log pseudolikelihood = -1044.0852                       Pseudo R2     = 0.1320
+
+---------------------------------------------------------------------------------------
+                      |               Robust
+           fies_dummy | Coefficient  std. err.      z    P>|z|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.2643439   .1217446    -2.17   0.030     -.502959   -.0257288
+                  sfi |    -.10702   .2865721    -0.37   0.709     -.668691    .4546509
+                  age |    .006712   .0038929     1.72   0.085    -.0009179     .014342
+           basic_educ |  -.2743838   .1269598    -2.16   0.031    -.5232205   -.0255471
+            male_head |   .0589228   .1742575     0.34   0.735    -.2826156    .4004613
+     dependency_ratio |   .2545627   .0574696     4.43   0.000     .1419245     .367201
+  non_farm_enterprise |  -.2465864   .2108174    -1.17   0.242    -.6597809     .166608
+         wealth_index |  -.2678393   .0976328    -2.74   0.006    -.4591961   -.0764826
+       soil_fertility |  -.0895886   .0917893    -0.98   0.329    -.2694922    .0903151
+        drought_shock |   .9860538   .1550723     6.36   0.000     .6821177     1.28999
+              married |  -.1407446   .1815049    -0.78   0.438    -.4964876    .2149985
+           total_land |  -.3864687   .0801444    -4.82   0.000    -.5435488   -.2293886
+         livestock_hh |  -.5010645   .2328087    -2.15   0.031    -.9573613   -.0447678
+                      |
+                saq01 |
+           3. AMHARA  |   1.049176   .3765647     2.79   0.005      .311123     1.78723
+           4. OROMIA  |   2.132624   .3683446     5.79   0.000     1.410682    2.854566
+           5. SOMALI  |   .0648125   .3585133     0.18   0.857    -.6378606    .7674856
+6. BENISHANGUL GUMUZ  |   .9285014    .432136     2.15   0.032     .0815304    1.775472
+             7. SNNP  |   1.781404   .3673896     4.85   0.000     1.061333    2.501474
+         12. GAMBELA  |   .6578236   .3893016     1.69   0.091    -.1051935    1.420841
+           13. HARAR  |  -.0678569   .4138854    -0.16   0.870    -.8790573    .7433435
+       15. DIRE DAWA  |   .7227182   .3847523     1.88   0.060    -.0313825    1.476819
+                      |
+                _cons |  -1.222197    .424496    -2.88   0.004    -2.054194   -.3901996
+---------------------------------------------------------------------------------------
+
+. estimates store pap_fi_a
+
+. margins, dydx(*)
+
+Average marginal effects                                 Number of obs = 1,826
+Model VCE: Robust
+
+Expression: Pr(fies_dummy), predict()
+dy/dx wrt:  female_landowner sfi age basic_educ male_head dependency_ratio
+            non_farm_enterprise wealth_index soil_fertility drought_shock married
+            total_land livestock_hh 3.saq01 4.saq01 5.saq01 6.saq01 7.saq01 12.saq01
+            13.saq01 15.saq01
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      z    P>|z|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.0515797   .0236424    -2.18   0.029     -.097918   -.0052414
+                  sfi |  -.0208821   .0559187    -0.37   0.709    -.1304807    .0887164
+                  age |   .0013097   .0007577     1.73   0.084    -.0001754    .0027947
+           basic_educ |  -.0535387   .0247361    -2.16   0.030    -.1020206   -.0050568
+            male_head |   .0114972   .0339954     0.34   0.735    -.0551326    .0781271
+     dependency_ratio |   .0496712   .0110114     4.51   0.000     .0280892    .0712532
+  non_farm_enterprise |  -.0481148   .0411473    -1.17   0.242    -.1287621    .0325325
+         wealth_index |  -.0522617   .0187854    -2.78   0.005    -.0890804    -.015443
+       soil_fertility |  -.0174808   .0178994    -0.98   0.329    -.0525631    .0176014
+        drought_shock |   .1924022   .0291863     6.59   0.000     .1351981    .2496064
+              married |  -.0274626   .0353959    -0.78   0.438    -.0968373    .0419122
+           total_land |  -.0754091   .0152574    -4.94   0.000    -.1053131   -.0455051
+         livestock_hh |  -.0977694   .0451782    -2.16   0.030     -.186317   -.0092219
+                      |
+                saq01 |
+           3. AMHARA  |   .1690429   .0521788     3.24   0.001     .0667743    .2713114
+           4. OROMIA  |   .3938631   .0496083     7.94   0.000     .2966326    .4910936
+           5. SOMALI  |   .0083632   .0459832     0.18   0.856    -.0817623    .0984886
+6. BENISHANGUL GUMUZ  |   .1462068   .0646219     2.26   0.024     .0195503    .2728634
+             7. SNNP  |    .319381   .0497221     6.42   0.000     .2219274    .4168346
+         12. GAMBELA  |    .097919   .0545891     1.79   0.073    -.0090737    .2049116
+           13. HARAR  |  -.0084552   .0519411    -0.16   0.871    -.1102578    .0933474
+       15. DIRE DAWA  |   .1091019   .0543433     2.01   0.045      .002591    .2156128
+---------------------------------------------------------------------------------------
+Note: dy/dx for factor levels is the discrete change from the base level.
+
+. 
+. * ----- 5b. Moderate or severe FI, Spec B (sole vs joint) -----
+. display as text _n "5b. Logit, moderate/severe FI, sole vs joint"
+
+5b. Logit, moderate/severe FI, sole vs joint
+
+. logit fies_dummy sole_female_ownership joint_ownership $x_paper i.saq01, vce(robust)
+
+Iteration 0:   log pseudolikelihood = -1202.9226  
+Iteration 1:   log pseudolikelihood = -1047.8396  
+Iteration 2:   log pseudolikelihood = -1043.4218  
+Iteration 3:   log pseudolikelihood = -1043.4074  
+Iteration 4:   log pseudolikelihood = -1043.4074  
+
+Logistic regression                                     Number of obs =  1,826
+                                                        Wald chi2(22) = 251.22
+                                                        Prob > chi2   = 0.0000
+Log pseudolikelihood = -1043.4074                       Pseudo R2     = 0.1326
+
+---------------------------------------------------------------------------------------
+                      |               Robust
+           fies_dummy | Coefficient  std. err.      z    P>|z|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.0535946   .2257257    -0.24   0.812    -.4960088    .3888195
+      joint_ownership |  -.3219133   .1314498    -2.45   0.014    -.5795502   -.0642765
+                  sfi |  -.0984685   .2865855    -0.34   0.731    -.6601659    .4632288
+                  age |   .0068917   .0038953     1.77   0.077    -.0007429    .0145263
+           basic_educ |  -.2723618   .1270938    -2.14   0.032    -.5214611   -.0232625
+            male_head |   .1817945   .2026262     0.90   0.370    -.2153456    .5789346
+     dependency_ratio |   .2531053   .0573637     4.41   0.000     .1406744    .3655361
+  non_farm_enterprise |  -.2527737   .2111357    -1.20   0.231     -.666592    .1610445
+         wealth_index |  -.2670348   .0975124    -2.74   0.006    -.4581555    -.075914
+       soil_fertility |  -.0916807   .0918855    -1.00   0.318    -.2717729    .0884115
+        drought_shock |   .9867849   .1552305     6.36   0.000     .6825387    1.291031
+              married |  -.1194723   .1822763    -0.66   0.512    -.4767273    .2377828
+           total_land |  -.3803076   .0801259    -4.75   0.000    -.5373516   -.2232637
+         livestock_hh |  -.5141355   .2323042    -2.21   0.027    -.9694434   -.0588276
+                      |
+                saq01 |
+           3. AMHARA  |   1.039485   .3759001     2.77   0.006     .3027343    1.776236
+           4. OROMIA  |   2.123783   .3677365     5.78   0.000     1.403032    2.844533
+           5. SOMALI  |    .064452   .3583846     0.18   0.857    -.6379688    .7668729
+6. BENISHANGUL GUMUZ  |   .9127404   .4320075     2.11   0.035     .0660212     1.75946
+             7. SNNP  |    1.77709   .3670884     4.84   0.000      1.05761     2.49657
+         12. GAMBELA  |   .6698099   .3889547     1.72   0.085    -.0925273    1.432147
+           13. HARAR  |  -.0707309   .4129744    -0.17   0.864    -.8801458    .7386841
+       15. DIRE DAWA  |   .7161239   .3847657     1.86   0.063    -.0380031    1.470251
+                      |
+                _cons |  -1.337958    .434967    -3.08   0.002    -2.190477   -.4854383
+---------------------------------------------------------------------------------------
+
+. estimates store pap_fi_b
+
+. test sole_female_ownership = joint_ownership
+
+ ( 1)  [fies_dummy]sole_female_ownership - [fies_dummy]joint_ownership = 0
+
+           chi2(  1) =    1.26
+         Prob > chi2 =    0.2612
+
+. lincom sole_female_ownership - joint_ownership
+
+ ( 1)  [fies_dummy]sole_female_ownership - [fies_dummy]joint_ownership = 0
+
+------------------------------------------------------------------------------
+  fies_dummy | Coefficient  Std. err.      z    P>|z|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   .2683187   .2388271     1.12   0.261    -.1997739    .7364113
+------------------------------------------------------------------------------
+
+. margins, dydx(*)
+
+Average marginal effects                                 Number of obs = 1,826
+Model VCE: Robust
+
+Expression: Pr(fies_dummy), predict()
+dy/dx wrt:  sole_female_ownership joint_ownership sfi age basic_educ male_head
+            dependency_ratio non_farm_enterprise wealth_index soil_fertility
+            drought_shock married total_land livestock_hh 3.saq01 4.saq01 5.saq01
+            6.saq01 7.saq01 12.saq01 13.saq01 15.saq01
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      z    P>|z|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.0104486   .0439954    -0.24   0.812    -.0966779    .0757808
+      joint_ownership |  -.0627587    .025498    -2.46   0.014    -.1127338   -.0127836
+                  sfi |   -.019197   .0558731    -0.34   0.731    -.1287062    .0903123
+                  age |   .0013436   .0007576     1.77   0.076    -.0001413    .0028284
+           basic_educ |  -.0530984   .0247411    -2.15   0.032      -.10159   -.0046068
+            male_head |   .0354418    .039487     0.90   0.369    -.0419513    .1128349
+     dependency_ratio |   .0493442   .0109832     4.49   0.000     .0278176    .0708708
+  non_farm_enterprise |  -.0492796    .041172    -1.20   0.231    -.1299751     .031416
+         wealth_index |  -.0520598   .0187522    -2.78   0.005    -.0888136   -.0153061
+       soil_fertility |  -.0178736   .0179031    -1.00   0.318     -.052963    .0172158
+        drought_shock |    .192379   .0291782     6.59   0.000     .1351908    .2495671
+              married |  -.0232918    .035518    -0.66   0.512    -.0929058    .0463223
+           total_land |   -.074143   .0152521    -4.86   0.000    -.1040365   -.0442495
+         livestock_hh |  -.1002334   .0450378    -2.23   0.026    -.1885058   -.0119611
+                      |
+                saq01 |
+           3. AMHARA  |   .1674785   .0521527     3.21   0.001     .0652611    .2696959
+           4. OROMIA  |   .3923292   .0496363     7.90   0.000     .2950437    .4896146
+           5. SOMALI  |   .0083356   .0460767     0.18   0.856     -.081973    .0986442
+6. BENISHANGUL GUMUZ  |   .1435482   .0645648     2.22   0.026     .0170035     .270093
+             7. SNNP  |   .3188274   .0497931     6.40   0.000     .2212348      .41642
+         12. GAMBELA  |   .1001682   .0547514     1.83   0.067    -.0071427     .207479
+           13. HARAR  |  -.0088281   .0519318    -0.17   0.865    -.1106126    .0929565
+       15. DIRE DAWA  |   .1081699   .0544445     1.99   0.047     .0014607    .2148792
+---------------------------------------------------------------------------------------
+Note: dy/dx for factor levels is the discrete change from the base level.
+
+. 
+. * ----- 5c. Severe FI, Spec A -----
+. display as text _n "5c. Logit, severe FI, any female owner"
+
+5c. Logit, severe FI, any female owner
+
+. logit severe_fi female_landowner $x_paper i.saq01, vce(robust)
+
+Iteration 0:   log pseudolikelihood = -697.16923  
+Iteration 1:   log pseudolikelihood = -588.50602  
+Iteration 2:   log pseudolikelihood = -561.64909  
+Iteration 3:   log pseudolikelihood = -560.10862  
+Iteration 4:   log pseudolikelihood = -560.10096  
+Iteration 5:   log pseudolikelihood = -560.10096  
+
+Logistic regression                                     Number of obs =  1,826
+                                                        Wald chi2(21) = 202.87
+                                                        Prob > chi2   = 0.0000
+Log pseudolikelihood = -560.10096                       Pseudo R2     = 0.1966
+
+---------------------------------------------------------------------------------------
+                      |               Robust
+            severe_fi | Coefficient  std. err.      z    P>|z|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |   -.398834   .1872439    -2.13   0.033    -.7658253   -.0318427
+                  sfi |  -.8128254   .4104066    -1.98   0.048    -1.617208   -.0084433
+                  age |   .0075094   .0053301     1.41   0.159    -.0029374    .0179561
+           basic_educ |  -.0547803   .1863178    -0.29   0.769    -.4199565    .3103959
+            male_head |  -.4351824   .2303935    -1.89   0.059    -.8867453    .0163805
+     dependency_ratio |   .0780392   .0813302     0.96   0.337    -.0813651    .2374434
+  non_farm_enterprise |   .5095265   .2987673     1.71   0.088    -.0760468      1.0951
+         wealth_index |  -.6198464   .1507536    -4.11   0.000    -.9153181   -.3243747
+       soil_fertility |   .0983943   .1224069     0.80   0.421    -.1415189    .3383074
+        drought_shock |   1.513659   .1886751     8.02   0.000     1.143863    1.883455
+              married |   .1276294   .2467491     0.52   0.605    -.3559899    .6112487
+           total_land |  -.3646494   .1528178    -2.39   0.017    -.6641668    -.065132
+         livestock_hh |  -.6647089   .3210029    -2.07   0.038    -1.293863   -.0355548
+                      |
+                saq01 |
+           3. AMHARA  |   .3734568    .471248     0.79   0.428    -.5501723    1.297086
+           4. OROMIA  |   1.961436   .4201006     4.67   0.000     1.138054    2.784818
+           5. SOMALI  |  -.8799997   .4121054    -2.14   0.033    -1.687711    -.072288
+6. BENISHANGUL GUMUZ  |   .2501211   .6471285     0.39   0.699    -1.018227     1.51847
+             7. SNNP  |   1.340835   .4290947     3.12   0.002     .4998245    2.181845
+         12. GAMBELA  |   -1.12108   .6920515    -1.62   0.105    -2.477476    .2353162
+           13. HARAR  |   -.885378   .6158939    -1.44   0.151    -2.092508    .3217519
+       15. DIRE DAWA  |  -.4671297   .5490362    -0.85   0.395    -1.543221    .6089616
+                      |
+                _cons |  -2.287557   .5277638    -4.33   0.000    -3.321955   -1.253158
+---------------------------------------------------------------------------------------
+
+. estimates store pap_sev_a
+
+. margins, dydx(*)
+
+Average marginal effects                                 Number of obs = 1,826
+Model VCE: Robust
+
+Expression: Pr(severe_fi), predict()
+dy/dx wrt:  female_landowner sfi age basic_educ male_head dependency_ratio
+            non_farm_enterprise wealth_index soil_fertility drought_shock married
+            total_land livestock_hh 3.saq01 4.saq01 5.saq01 6.saq01 7.saq01 12.saq01
+            13.saq01 15.saq01
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      z    P>|z|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |   -.036812   .0171849    -2.14   0.032    -.0704937   -.0031303
+                  sfi |   -.075023   .0379357    -1.98   0.048    -.1493756   -.0006703
+                  age |   .0006931   .0004936     1.40   0.160    -.0002743    .0016605
+           basic_educ |  -.0050562   .0171792    -0.29   0.769    -.0387268    .0286145
+            male_head |  -.0401669    .021233    -1.89   0.059    -.0817828     .001449
+     dependency_ratio |   .0072029   .0075044     0.96   0.337    -.0075055    .0219114
+  non_farm_enterprise |   .0470288   .0275584     1.71   0.088    -.0069846    .1010422
+         wealth_index |  -.0572112   .0138524    -4.13   0.000    -.0843614    -.030061
+       soil_fertility |   .0090817   .0112869     0.80   0.421    -.0130403    .0312036
+        drought_shock |   .1397092   .0162885     8.58   0.000     .1077843     .171634
+              married |   .0117801   .0227431     0.52   0.604    -.0327957    .0563558
+           total_land |  -.0336568   .0139943    -2.41   0.016    -.0610851   -.0062284
+         livestock_hh |  -.0613519   .0295597    -2.08   0.038    -.1192879   -.0034159
+                      |
+                saq01 |
+           3. AMHARA  |   .0272308    .033613     0.81   0.418    -.0386495    .0931111
+           4. OROMIA  |   .2167328   .0340977     6.36   0.000     .1499026    .2835631
+           5. SOMALI  |  -.0437277   .0236857    -1.85   0.065    -.0901508    .0026954
+6. BENISHANGUL GUMUZ  |   .0175877   .0466612     0.38   0.706    -.0738665    .1090419
+             7. SNNP  |   .1276396   .0326596     3.91   0.000      .063628    .1916512
+         12. GAMBELA  |  -.0516571   .0292568    -1.77   0.077    -.1089994    .0056852
+           13. HARAR  |  -.0439209   .0303173    -1.45   0.147    -.1033416    .0154999
+       15. DIRE DAWA  |  -.0264072   .0311451    -0.85   0.397    -.0874506    .0346361
+---------------------------------------------------------------------------------------
+Note: dy/dx for factor levels is the discrete change from the base level.
+
+. 
+. * ----- 5d. Severe FI, Spec B -----
+. display as text _n "5d. Logit, severe FI, sole vs joint"
+
+5d. Logit, severe FI, sole vs joint
+
+. logit severe_fi sole_female_ownership joint_ownership $x_paper i.saq01, vce(robust)
+
+Iteration 0:   log pseudolikelihood = -697.16923  
+Iteration 1:   log pseudolikelihood = -587.58575  
+Iteration 2:   log pseudolikelihood = -560.59562  
+Iteration 3:   log pseudolikelihood = -559.04642  
+Iteration 4:   log pseudolikelihood =  -559.0382  
+Iteration 5:   log pseudolikelihood =  -559.0382  
+
+Logistic regression                                     Number of obs =  1,826
+                                                        Wald chi2(22) = 199.79
+                                                        Prob > chi2   = 0.0000
+Log pseudolikelihood = -559.0382                        Pseudo R2     = 0.1981
+
+---------------------------------------------------------------------------------------
+                      |               Robust
+            severe_fi | Coefficient  std. err.      z    P>|z|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.0649246   .2881726    -0.23   0.822    -.6297325    .4998834
+      joint_ownership |  -.5238537   .2135624    -2.45   0.014    -.9424284   -.1052791
+                  sfi |  -.8139808    .411102    -1.98   0.048    -1.619726   -.0082358
+                  age |   .0076613   .0053616     1.43   0.153    -.0028473    .0181699
+           basic_educ |  -.0463585   .1865537    -0.25   0.804     -.411997      .31928
+            male_head |  -.2450973   .2626111    -0.93   0.351    -.7598055    .2696109
+     dependency_ratio |   .0740061   .0813067     0.91   0.363    -.0853522    .2333643
+  non_farm_enterprise |   .5054104   .2955921     1.71   0.087    -.0739394     1.08476
+         wealth_index |  -.6274793   .1533011    -4.09   0.000    -.9279439   -.3270146
+       soil_fertility |    .089765   .1223829     0.73   0.463    -.1501012    .3296311
+        drought_shock |   1.521421   .1899972     8.01   0.000     1.149033    1.893808
+              married |   .1697176   .2476774     0.69   0.493    -.3157212    .6551564
+           total_land |  -.3494203   .1531842    -2.28   0.023    -.6496559   -.0491847
+         livestock_hh |  -.6951333   .3216605    -2.16   0.031    -1.325576   -.0646903
+                      |
+                saq01 |
+           3. AMHARA  |    .373749   .4688033     0.80   0.425    -.5450886    1.292587
+           4. OROMIA  |   1.963996     .41771     4.70   0.000     1.145299    2.782692
+           5. SOMALI  |  -.8857557   .4099368    -2.16   0.031    -1.689217   -.0822944
+6. BENISHANGUL GUMUZ  |   .2396804    .647843     0.37   0.711    -1.030069    1.509429
+             7. SNNP  |   1.351918    .427623     3.16   0.002     .5137922    2.190043
+         12. GAMBELA  |  -1.081399   .6899642    -1.57   0.117    -2.433704    .2709055
+           13. HARAR  |  -.8640202   .6143224    -1.41   0.160     -2.06807    .3400296
+       15. DIRE DAWA  |  -.4783477   .5469571    -0.87   0.382    -1.550364    .5936685
+                      |
+                _cons |  -2.456003   .5373065    -4.57   0.000    -3.509105   -1.402902
+---------------------------------------------------------------------------------------
+
+. estimates store pap_sev_b
+
+. test sole_female_ownership = joint_ownership
+
+ ( 1)  [severe_fi]sole_female_ownership - [severe_fi]joint_ownership = 0
+
+           chi2(  1) =    2.10
+         Prob > chi2 =    0.1477
+
+. lincom sole_female_ownership - joint_ownership
+
+ ( 1)  [severe_fi]sole_female_ownership - [severe_fi]joint_ownership = 0
+
+------------------------------------------------------------------------------
+   severe_fi | Coefficient  Std. err.      z    P>|z|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   .4589292   .3170255     1.45   0.148    -.1624294    1.080288
+------------------------------------------------------------------------------
+
+. margins, dydx(*)
+
+Average marginal effects                                 Number of obs = 1,826
+Model VCE: Robust
+
+Expression: Pr(severe_fi), predict()
+dy/dx wrt:  sole_female_ownership joint_ownership sfi age basic_educ male_head
+            dependency_ratio non_farm_enterprise wealth_index soil_fertility
+            drought_shock married total_land livestock_hh 3.saq01 4.saq01 5.saq01
+            6.saq01 7.saq01 12.saq01 13.saq01 15.saq01
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      z    P>|z|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.0059866   .0265625    -0.23   0.822    -.0580481    .0460749
+      joint_ownership |   -.048304   .0195519    -2.47   0.013    -.0866251   -.0099829
+                  sfi |  -.0750563   .0379674    -1.98   0.048     -.149471   -.0006416
+                  age |   .0007064    .000496     1.42   0.154    -.0002657    .0016786
+           basic_educ |  -.0042747   .0171871    -0.25   0.804    -.0379607    .0294114
+            male_head |  -.0226002   .0241949    -0.93   0.350    -.0700213     .024821
+     dependency_ratio |    .006824   .0074957     0.91   0.363    -.0078672    .0215153
+  non_farm_enterprise |   .0466033   .0272247     1.71   0.087    -.0067561    .0999628
+         wealth_index |  -.0578592   .0140504    -4.12   0.000    -.0853975   -.0303209
+       soil_fertility |   .0082771   .0112766     0.73   0.463    -.0138246    .0303789
+        drought_shock |   .1402886   .0163628     8.57   0.000     .1082181    .1723591
+              married |   .0156495   .0227967     0.69   0.492    -.0290311    .0603301
+           total_land |  -.0322197   .0140288    -2.30   0.022    -.0597157   -.0047236
+         livestock_hh |  -.0640975   .0295649    -2.17   0.030    -.1220436   -.0061514
+                      |
+                saq01 |
+           3. AMHARA  |   .0271426   .0332966     0.82   0.415    -.0381175    .0924027
+           4. OROMIA  |   .2159237   .0337319     6.40   0.000     .1498104     .282037
+           5. SOMALI  |  -.0438401   .0233961    -1.87   0.061    -.0896955    .0020154
+6. BENISHANGUL GUMUZ  |   .0167366   .0463457     0.36   0.718    -.0740994    .1075726
+             7. SNNP  |   .1283686   .0324781     3.95   0.000     .0647127    .1920245
+         12. GAMBELA  |  -.0503514   .0293754    -1.71   0.087    -.1079262    .0072234
+           13. HARAR  |  -.0430555   .0302751    -1.42   0.155    -.1023936    .0162826
+       15. DIRE DAWA  |  -.0268759   .0308064    -0.87   0.383    -.0872554    .0335035
+---------------------------------------------------------------------------------------
+Note: dy/dx for factor levels is the discrete change from the base level.
+
+. 
+. * ----- 5e. FIES score (0-8), OLS -----
+. display as text _n "5e. OLS, FIES score, any female owner"
+
+5e. OLS, FIES score, any female owner
+
+. regress fies_score female_landowner $x_paper i.saq01, vce(robust)
+
+Linear regression                               Number of obs     =      1,826
+                                                F(21, 1804)       =      28.66
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.2112
+                                                Root MSE          =     2.3819
+
+---------------------------------------------------------------------------------------
+                      |               Robust
+           fies_score | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.2448936    .129638    -1.89   0.059      -.49915    .0093627
+                  sfi |   -.310256   .2957545    -1.05   0.294    -.8903134    .2698014
+                  age |   .0059277   .0042257     1.40   0.161    -.0023601    .0142155
+           basic_educ |  -.3500966   .1306947    -2.68   0.007    -.6064255   -.0937676
+            male_head |  -.0566251   .1921049    -0.29   0.768    -.4333967    .3201464
+     dependency_ratio |   .2490917   .0640218     3.89   0.000     .1235271    .3746563
+  non_farm_enterprise |  -.2557982   .2168676    -1.18   0.238    -.6811364    .1695399
+         wealth_index |  -.2611375   .0629026    -4.15   0.000    -.3845072   -.1377679
+       soil_fertility |  -.1316012   .1044134    -1.26   0.208    -.3363851    .0731827
+        drought_shock |    1.44481   .1792735     8.06   0.000     1.093205    1.796416
+              married |  -.0096901   .1962321    -0.05   0.961    -.3945561    .3751759
+           total_land |  -.3640289   .0539113    -6.75   0.000    -.4697641   -.2582937
+         livestock_hh |  -.5521774   .2579507    -2.14   0.032    -1.058091    -.046264
+                      |
+                saq01 |
+           3. AMHARA  |   1.129835   .3967558     2.85   0.004     .3516856    1.907984
+           4. OROMIA  |   2.621281   .4030173     6.50   0.000     1.830851    3.411711
+           5. SOMALI  |   -.211619   .4459685    -0.47   0.635    -1.086288      .66305
+6. BENISHANGUL GUMUZ  |   1.590332   .4233116     3.76   0.000     .7600992    2.420564
+             7. SNNP  |   2.259417   .3995484     5.65   0.000     1.475791    3.043044
+         12. GAMBELA  |   .9571276   .3935831     2.43   0.015      .185201    1.729054
+           13. HARAR  |  -.2195061   .4150548    -0.53   0.597    -1.033545    .5945325
+       15. DIRE DAWA  |    .946067   .4120677     2.30   0.022      .137887    1.754247
+                      |
+                _cons |   2.085367   .4775338     4.37   0.000     1.148789    3.021944
+---------------------------------------------------------------------------------------
+
+. estimates store pap_ols_a
+
+. 
+. display as text _n "5f. OLS, FIES score, sole vs joint"
+
+5f. OLS, FIES score, sole vs joint
+
+. regress fies_score sole_female_ownership joint_ownership $x_paper i.saq01, vce(robust)
+
+Linear regression                               Number of obs     =      1,826
+                                                F(22, 1803)       =      27.49
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.2118
+                                                Root MSE          =     2.3816
+
+---------------------------------------------------------------------------------------
+                      |               Robust
+           fies_score | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.0120328   .2599065    -0.05   0.963    -.5217825    .4977168
+      joint_ownership |  -.3033559   .1349252    -2.25   0.025    -.5679821   -.0387296
+                  sfi |  -.3006203   .2960948    -1.02   0.310    -.8813453    .2801048
+                  age |   .0060831   .0042247     1.44   0.150    -.0022028     .014369
+           basic_educ |  -.3492688   .1305567    -2.68   0.008    -.6053271   -.0932105
+            male_head |   .0763551    .223943     0.34   0.733    -.3628601    .5155702
+     dependency_ratio |    .246676   .0639536     3.86   0.000     .1212451    .3721069
+  non_farm_enterprise |  -.2613782   .2163113    -1.21   0.227    -.6856253     .162869
+         wealth_index |  -.2616571   .0623196    -4.20   0.000    -.3838832   -.1394309
+       soil_fertility |  -.1330805   .1044406    -1.27   0.203    -.3379178    .0717568
+        drought_shock |   1.444558   .1792486     8.06   0.000     1.093001    1.796114
+              married |   .0185795   .1979277     0.09   0.925    -.3696123    .4067714
+           total_land |  -.3589565   .0539253    -6.66   0.000    -.4647192   -.2531938
+         livestock_hh |  -.5644458   .2576559    -2.19   0.029    -1.069781   -.0591103
+                      |
+                saq01 |
+           3. AMHARA  |   1.119397   .3959749     2.83   0.005     .3427793    1.896015
+           4. OROMIA  |   2.610476   .4022486     6.49   0.000     1.821554    3.399399
+           5. SOMALI  |  -.2089535   .4451735    -0.47   0.639    -1.082064    .6641566
+6. BENISHANGUL GUMUZ  |   1.571596   .4236544     3.71   0.000     .7406912    2.402502
+             7. SNNP  |   2.251258   .3989599     5.64   0.000     1.468786     3.03373
+         12. GAMBELA  |    .963793   .3926209     2.45   0.014     .1937533    1.733833
+           13. HARAR  |  -.2257571   .4141012    -0.55   0.586    -1.037926    .5864115
+       15. DIRE DAWA  |   .9392827   .4115977     2.28   0.023     .1320242    1.746541
+                      |
+                _cons |   1.956854   .4869323     4.02   0.000     1.001844    2.911865
+---------------------------------------------------------------------------------------
+
+. estimates store pap_ols_b
+
+. test sole_female_ownership = joint_ownership
+
+ ( 1)  sole_female_ownership - joint_ownership = 0
+
+       F(  1,  1803) =    1.21
+            Prob > F =    0.2721
+
+. lincom sole_female_ownership - joint_ownership
+
+ ( 1)  sole_female_ownership - joint_ownership = 0
+
+------------------------------------------------------------------------------
+  fies_score | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |    .291323   .2651755     1.10   0.272    -.2287605    .8114066
+------------------------------------------------------------------------------
+
+. 
+. /// Wald test for test of better models
+> test sole_female_ownership = joint_ownership
+
+ ( 1)  sole_female_ownership - joint_ownership = 0
+
+       F(  1,  1803) =    1.21
+            Prob > F =    0.2721
+
+. 
+. 
+. 
+. * Compact tables: Spec A and Spec B separately
+. * (mixing them in one keep() list is hard to read; region dummies omitted)
+. display as text _n "Previous models, Spec A (any female owner + controls)"
+
+Previous models, Spec A (any female owner + controls)
+
+. estimates table pap_fi_a pap_sev_a pap_ols_a, ///
+>     keep(female_landowner $x_paper) star stats(N)
+
+--------------------------------------------------------------
+    Variable |   pap_fi_a        pap_sev_a       pap_ols_a    
+-------------+------------------------------------------------
+female_lan~r | -.26434391*                                    
+         sfi | -.10702004                                     
+         age |  .00671201                                     
+  basic_educ | -.27438379*                                    
+   male_head |  .05892285                                     
+dependency~o |  .25456275***                                  
+non_farm_e~e |  -.2465864                                     
+wealth_index | -.26783933**                                   
+soil_ferti~y | -.08958856                                     
+drought_sh~k |  .98605383***                                  
+     married | -.14074457                                     
+  total_land |  -.3864687***                                  
+livestock_hh | -.50106453*                                    
+-------------+------------------------------------------------
+           N |       1826            1826            1826     
+--------------------------------------------------------------
+                      Legend: * p<0.05; ** p<0.01; *** p<0.001
+
+. 
+. display as text _n "Previous models, Spec B (sole vs joint + controls)"
+
+Previous models, Spec B (sole vs joint + controls)
+
+. estimates table pap_fi_b pap_sev_b pap_ols_b, ///
+>     keep(sole_female_ownership joint_ownership $x_paper) star stats(N)
+
+--------------------------------------------------------------
+    Variable |   pap_fi_b        pap_sev_b       pap_ols_b    
+-------------+------------------------------------------------
+sole_femal~p | -.05359464                                     
+joint_owne~p | -.32191335*                                    
+         sfi | -.09846852                                     
+         age |  .00689174                                     
+  basic_educ |  -.2723618*                                    
+   male_head |  .18179452                                     
+dependency~o |  .25310527***                                  
+non_farm_e~e | -.25277375                                     
+wealth_index | -.26703476**                                   
+soil_ferti~y | -.09168067                                     
+drought_sh~k |  .98678488***                                  
+     married | -.11947227                                     
+  total_land | -.38030765***                                  
+livestock_hh | -.51413549*                                    
+-------------+------------------------------------------------
+           N |       1826            1826            1826     
+--------------------------------------------------------------
+                      Legend: * p<0.05; ** p<0.01; *** p<0.001
+
+. 
+. 
+. ********************************************************************************
+. * STEP 6.  NEW MODELS
+. *          Same 1,826 households
+. *          svyset: cluster at the EA (psu) and weight with pw_w5
+. ********************************************************************************
+. 
+. display as text _n "===== STEP 6. New models: survey weight + EA cluster ====="
+
+===== STEP 6. New models: survey weight + EA cluster =====
+
+. 
+. if "$wt" == "" {
+.     display as text "No weight variable. Skipping survey models."
+. }
+
+. else {
+.     quietly count if missing($wt) | missing(psu)
+.     display as text "Households missing weight or PSU: " r(N)
+Households missing weight or PSU: 0
+. 
+.     preserve
+.     drop if missing($wt, psu)
+(0 observations deleted)
+.     svyset psu [pweight=$wt], singleunit(centered)
+
+Sampling weights: pw_w5
+             VCE: linearized
+     Single unit: centered
+        Strata 1: <one>
+ Sampling unit 1: psu
+           FPC 1: <zero>
+.     display as text "Survey N = " _N "   weight = $wt"
+Survey N = 1826   weight = pw_w5
+. 
+.     * OLS on FIES score
+.     display as text _n "6a. Survey OLS, FIES score, Spec A"
+
+6a. Survey OLS, FIES score, Spec A
+.     svy: regress fies_score female_landowner $x_paper i.saq01
+(running regress on estimation sample)
+
+Survey: Linear regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(21, 176)      =       4.95
+                                                  Prob > F        =     0.0000
+                                                  R-squared       =     0.1926
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+           fies_score | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.4884324   .2973048    -1.64   0.102    -1.074759    .0978947
+                  sfi |   .5465876   .6521892     0.84   0.403    -.7396216    1.832797
+                  age |   .0076423   .0071401     1.07   0.286    -.0064389    .0217236
+           basic_educ |  -.2665126   .2339576    -1.14   0.256      -.72791    .1948848
+            male_head |  -.4212857   .3366312    -1.25   0.212     -1.08517    .2425986
+     dependency_ratio |   .3423012   .1326749     2.58   0.011     .0806476    .6039547
+  non_farm_enterprise |   .5427209   .4698653     1.16   0.249    -.3839198    1.469362
+         wealth_index |  -.5465603   .1502065    -3.64   0.000    -.8427888   -.2503318
+       soil_fertility |  -.4334155   .2609128    -1.66   0.098    -.9479724    .0811415
+        drought_shock |   1.150441   .4252677     2.71   0.007     .3117527    1.989128
+              married |  -.0965475   .3582135    -0.27   0.788    -.8029952    .6099001
+           total_land |  -.2533857   .0862846    -2.94   0.004    -.4235512   -.0832203
+         livestock_hh |    -.67912   .5131285    -1.32   0.187    -1.691082    .3328419
+                      |
+                saq01 |
+           3. AMHARA  |   1.085403   .7499831     1.45   0.149    -.3936699    2.564475
+           4. OROMIA  |   2.775094   .7979213     3.48   0.001     1.201481    4.348708
+           5. SOMALI  |   .2856662    .947049     0.30   0.763    -1.582048    2.153381
+6. BENISHANGUL GUMUZ  |   1.679774   .7997326     2.10   0.037     .1025881    3.256959
+             7. SNNP  |   2.434501   .7993569     3.05   0.003     .8580566    4.010946
+         12. GAMBELA  |   1.504343   .7394509     2.03   0.043     .0460416    2.962645
+           13. HARAR  |   .6698812    .786056     0.85   0.395    -.8803323    2.220095
+       15. DIRE DAWA  |   1.452092   .7640229     1.90   0.059    -.0546687    2.958853
+                      |
+                _cons |   2.410397   .9229734     2.61   0.010     .5901629    4.230631
+---------------------------------------------------------------------------------------
+.     estimates store svy_ols_a
+.     display as text _n "6b. Survey OLS, FIES score, Spec B"
+
+6b. Survey OLS, FIES score, Spec B
+.     svy: regress fies_score sole_female_ownership joint_ownership $x_paper i.saq01
+(running regress on estimation sample)
+
+Survey: Linear regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(22, 175)      =       4.74
+                                                  Prob > F        =     0.0000
+                                                  R-squared       =     0.1928
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+           fies_score | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.3100776   .4787203    -0.65   0.518    -1.254182    .6340264
+      joint_ownership |  -.5161666   .3034518    -1.70   0.091    -1.114616    .0822833
+                  sfi |   .5507611   .6516851     0.85   0.399    -.7344539    1.835976
+                  age |   .0076961   .0071515     1.08   0.283    -.0064076    .0217999
+           basic_educ |  -.2634718    .234211    -1.12   0.262    -.7253688    .1984253
+            male_head |  -.3007925    .388328    -0.77   0.440     -1.06663    .4650451
+     dependency_ratio |   .3430931   .1324115     2.59   0.010     .0819588    .6042273
+  non_farm_enterprise |   .5375636   .4671312     1.15   0.251    -.3836851    1.458812
+         wealth_index |   -.545972   .1498317    -3.64   0.000    -.8414613   -.2504827
+       soil_fertility |   -.438107   .2631465    -1.66   0.098    -.9570691    .0808551
+        drought_shock |    1.15471   .4256058     2.71   0.007      .315355    1.994064
+              married |  -.0784181   .3660174    -0.21   0.831     -.800256    .6434199
+           total_land |  -.2512732   .0868622    -2.89   0.004    -.4225777   -.0799687
+         livestock_hh |  -.7091953   .5139433    -1.38   0.169    -1.722764    .3043736
+                      |
+                saq01 |
+           3. AMHARA  |   1.084038   .7489707     1.45   0.149    -.3930379    2.561114
+           4. OROMIA  |    2.77064   .7956735     3.48   0.001     1.201459     4.33982
+           5. SOMALI  |   .2859919   .9518107     0.30   0.764    -1.591113    2.163097
+6. BENISHANGUL GUMUZ  |    1.67368   .7982403     2.10   0.037     .0994378    3.247923
+             7. SNNP  |   2.434266   .7986707     3.05   0.003      .859175    4.009358
+         12. GAMBELA  |   1.514202   .7418706     2.04   0.043     .0511282    2.977275
+           13. HARAR  |   .6724796   .7852275     0.86   0.393       -.8761    2.221059
+       15. DIRE DAWA  |     1.4479   .7609517     1.90   0.059    -.0528046    2.948604
+                      |
+                _cons |   2.317453   .9270011     2.50   0.013     .4892758     4.14563
+---------------------------------------------------------------------------------------
+.     estimates store svy_ols_b
+.     test sole_female_ownership = joint_ownership
+
+Adjusted Wald test
+
+ ( 1)  sole_female_ownership - joint_ownership = 0
+
+       F(  1,   196) =    0.22
+            Prob > F =    0.6406
+.     lincom sole_female_ownership - joint_ownership
+
+ ( 1)  sole_female_ownership - joint_ownership = 0
+
+------------------------------------------------------------------------------
+  fies_score | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   .2060889   .4406985     0.47   0.641    -.6630306    1.075209
+------------------------------------------------------------------------------
+. 
+.     * Moderate or severe FI
+.     display as text _n "6c. Survey logit, moderate/severe FI, Spec A"
+
+6c. Survey logit, moderate/severe FI, Spec A
+.     svy: logit fies_dummy female_landowner $x_paper i.saq01
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(21, 176)      =       2.66
+                                                  Prob > F        =     0.0003
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+           fies_dummy | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.3422384   .2460239    -1.39   0.166    -.8274322    .1429555
+                  sfi |   .4933555   .5219024     0.95   0.346    -.5359097    1.522621
+                  age |   .0059357    .005911     1.00   0.317    -.0057218    .0175931
+           basic_educ |  -.2437023   .2053089    -1.19   0.237    -.6486006    .1611959
+            male_head |  -.2924099   .2585064    -1.13   0.259    -.8022211    .2174013
+     dependency_ratio |   .2324628   .1146356     2.03   0.044     .0063853    .4585404
+  non_farm_enterprise |   .2568621   .3238715     0.79   0.429    -.3818582    .8955824
+         wealth_index |    -.32797   .1917681    -1.71   0.089    -.7061639    .0502238
+       soil_fertility |   -.390868   .2080585    -1.88   0.062    -.8011888    .0194527
+        drought_shock |   .6181264    .307829     2.01   0.046     .0110441    1.225209
+              married |  -.0807676   .2821846    -0.29   0.775    -.6372756    .4757404
+           total_land |    -.22472   .1024886    -2.19   0.030     -.426842   -.0225979
+         livestock_hh |  -.0783211    .422018    -0.19   0.853    -.9106003     .753958
+                      |
+                saq01 |
+           3. AMHARA  |   .3671804   .7331096     0.50   0.617    -1.078615    1.812976
+           4. OROMIA  |   1.517527   .7336032     2.07   0.040     .0707578    2.964296
+           5. SOMALI  |   .3414791   .7743391     0.44   0.660    -1.185627    1.868585
+6. BENISHANGUL GUMUZ  |   .2678807   .8371061     0.32   0.749    -1.383011    1.918772
+             7. SNNP  |   1.329425   .7502448     1.77   0.078    -.1501638    2.809013
+         12. GAMBELA  |   .4679883   .7705866     0.61   0.544    -1.051717    1.987694
+           13. HARAR  |   .0357695   .7861639     0.05   0.964    -1.514657    1.586196
+       15. DIRE DAWA  |   .6877431   .7206037     0.95   0.341    -.7333891    2.108875
+                      |
+                _cons |   -.572991   .8219619    -0.70   0.487    -2.194016    1.048034
+---------------------------------------------------------------------------------------
+.     estimates store svy_fi_a
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(fies_dummy), predict()
+dy/dx wrt:  female_landowner sfi age basic_educ male_head dependency_ratio
+            non_farm_enterprise wealth_index soil_fertility drought_shock married
+            total_land livestock_hh 3.saq01 4.saq01 5.saq01 6.saq01 7.saq01 12.saq01
+            13.saq01 15.saq01
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.0734045   .0522235    -1.41   0.161    -.1763966    .0295875
+                  sfi |   .1058167   .1111834     0.95   0.342    -.1134527    .3250862
+                  age |   .0012731   .0012592     1.01   0.313    -.0012102    .0037564
+           basic_educ |  -.0522702   .0437225    -1.20   0.233     -.138497    .0339567
+            male_head |  -.0627172   .0553023    -1.13   0.258    -.1717811    .0463468
+     dependency_ratio |   .0498595   .0242339     2.06   0.041     .0020668    .0976522
+  non_farm_enterprise |   .0550927   .0693477     0.79   0.428    -.0816708    .1918562
+         wealth_index |  -.0703442   .0402697    -1.75   0.082    -.1497618    .0090733
+       soil_fertility |  -.0838348   .0436127    -1.92   0.056    -.1698452    .0021756
+        drought_shock |    .132578   .0646789     2.05   0.042     .0050221     .260134
+              married |  -.0173233   .0604313    -0.29   0.775    -.1365024    .1018557
+           total_land |  -.0481988   .0213869    -2.25   0.025    -.0903768   -.0060207
+         livestock_hh |  -.0167986   .0905526    -0.19   0.853    -.1953811    .1617839
+                      |
+                saq01 |
+           3. AMHARA  |   .0619209   .1152627     0.54   0.592    -.1653934    .2892352
+           4. OROMIA  |    .307137   .1200037     2.56   0.011     .0704728    .5438012
+           5. SOMALI  |   .0572497   .1284237     0.45   0.656    -.1960199    .3105194
+6. BENISHANGUL GUMUZ  |   .0441468   .1345974     0.33   0.743    -.2212984    .3095919
+             7. SNNP  |   .2642637   .1237338     2.14   0.034     .0202432    .5082843
+         12. GAMBELA  |   .0807059   .1271634     0.63   0.526    -.1700782      .33149
+           13. HARAR  |   .0055663   .1217482     0.05   0.964    -.2345383     .245671
+       15. DIRE DAWA  |   .1240542   .1188919     1.04   0.298    -.1104173    .3585258
+---------------------------------------------------------------------------------------
+Note: dy/dx for factor levels is the discrete change from the base level.
+.     display as text _n "6d. Survey logit, moderate/severe FI, Spec B"
+
+6d. Survey logit, moderate/severe FI, Spec B
+.     svy: logit fies_dummy sole_female_ownership joint_ownership $x_paper i.saq01
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(22, 175)      =       2.53
+                                                  Prob > F        =     0.0004
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+           fies_dummy | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.3234881   .4205433    -0.77   0.443    -1.152859    .5058827
+      joint_ownership |  -.3450435   .2491232    -1.39   0.168    -.8363495    .1462625
+                  sfi |   .4936292   .5212666     0.95   0.345     -.534382    1.521641
+                  age |   .0059418   .0059124     1.00   0.316    -.0057184    .0176019
+           basic_educ |  -.2432853   .2057496    -1.18   0.238    -.6490525     .162482
+            male_head |  -.2793938   .3376071    -0.83   0.409    -.9452027    .3864152
+     dependency_ratio |   .2325312   .1145158     2.03   0.044     .0066898    .4583725
+  non_farm_enterprise |   .2561346   .3225774     0.79   0.428    -.3800336    .8923028
+         wealth_index |  -.3278628   .1919176    -1.71   0.089    -.7063514    .0506258
+       soil_fertility |   -.391237   .2088864    -1.87   0.063    -.8031906    .0207165
+        drought_shock |   .6183492   .3081805     2.01   0.046     .0105736    1.226125
+              married |  -.0792615   .2818851    -0.28   0.779    -.6351787    .4766557
+           total_land |   -.224498   .1035735    -2.17   0.031    -.4287595   -.0202365
+         livestock_hh |  -.0814516   .4248752    -0.19   0.848    -.9193654    .7564622
+                      |
+                saq01 |
+           3. AMHARA  |   .3665036   .7325604     0.50   0.617    -1.078209    1.811216
+           4. OROMIA  |   1.516539   .7330578     2.07   0.040     .0708451    2.962232
+           5. SOMALI  |   .3412249   .7745979     0.44   0.660    -1.186392    1.868841
+6. BENISHANGUL GUMUZ  |   .2667509   .8360397     0.32   0.750    -1.382037    1.915539
+             7. SNNP  |   1.328888   .7493422     1.77   0.078    -.1489203    2.806697
+         12. GAMBELA  |    .468994   .7721111     0.61   0.544    -1.053718    1.991706
+           13. HARAR  |   .0356121   .7860547     0.05   0.964    -1.514599    1.585823
+       15. DIRE DAWA  |   .6870623    .719987     0.95   0.341    -.7328537    2.106978
+                      |
+                _cons |  -.5825094   .8291081    -0.70   0.483    -2.217628    1.052609
+---------------------------------------------------------------------------------------
+.     estimates store svy_fi_b
+.     test sole_female_ownership = joint_ownership
+
+Adjusted Wald test
+
+ ( 1)  [fies_dummy]sole_female_ownership - [fies_dummy]joint_ownership = 0
+
+       F(  1,   196) =    0.00
+            Prob > F =    0.9551
+.     lincom sole_female_ownership - joint_ownership
+
+ ( 1)  [fies_dummy]sole_female_ownership - [fies_dummy]joint_ownership = 0
+
+------------------------------------------------------------------------------
+  fies_dummy | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   .0215554   .3823779     0.06   0.955    -.7325478    .7756586
+------------------------------------------------------------------------------
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(fies_dummy), predict()
+dy/dx wrt:  sole_female_ownership joint_ownership sfi age basic_educ male_head
+            dependency_ratio non_farm_enterprise wealth_index soil_fertility
+            drought_shock married total_land livestock_hh 3.saq01 4.saq01 5.saq01
+            6.saq01 7.saq01 12.saq01 13.saq01 15.saq01
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |   -.069382     .08984    -0.77   0.441    -.2465592    .1077953
+      joint_ownership |  -.0740052   .0529084    -1.40   0.163     -.178348    .0303376
+                  sfi |    .105874   .1110518     0.95   0.342    -.1131359    .3248838
+                  age |   .0012744   .0012595     1.01   0.313    -.0012095    .0037583
+           basic_educ |    -.05218   .0438165    -1.19   0.235    -.1385924    .0342324
+            male_head |  -.0599246   .0722614    -0.83   0.408    -.2024343    .0825852
+     dependency_ratio |   .0498735   .0242091     2.06   0.041     .0021298    .0976171
+  non_farm_enterprise |   .0549359   .0690647     0.80   0.427    -.0812694    .1911412
+         wealth_index |  -.0703203   .0403038    -1.74   0.083    -.1498051    .0091646
+       soil_fertility |  -.0839128   .0437929    -1.92   0.057    -.1702786    .0024529
+        drought_shock |    .132624   .0647523     2.05   0.042     .0049233    .2603247
+              married |  -.0170001   .0603656    -0.28   0.779    -.1360495    .1020493
+           total_land |  -.0481505   .0216291    -2.23   0.027    -.0908061   -.0054949
+         livestock_hh |  -.0174698   .0911676    -0.19   0.848    -.1972652    .1623256
+                      |
+                saq01 |
+           3. AMHARA  |   .0618237   .1152319     0.54   0.592    -.1654299    .2890774
+           4. OROMIA  |   .3069803   .1199734     2.56   0.011     .0703757    .5435848
+           5. SOMALI  |   .0572285   .1285274     0.45   0.657    -.1962458    .3107028
+6. BENISHANGUL GUMUZ  |   .0439682   .1344634     0.33   0.744    -.2212126    .3091491
+             7. SNNP  |   .2642102   .1236731     2.14   0.034     .0203093    .5081111
+         12. GAMBELA  |   .0809304   .1275743     0.63   0.527    -.1706642     .332525
+           13. HARAR  |   .0055442   .1217883     0.05   0.964    -.2346394    .2457279
+       15. DIRE DAWA  |   .1239622   .1188247     1.04   0.298    -.1103769    .3583012
+---------------------------------------------------------------------------------------
+Note: dy/dx for factor levels is the discrete change from the base level.
+. 
+.         * only for female landownership
+.         svy: logit fies_dummy female_landowner $x_paper i.saq01
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(21, 176)      =       2.66
+                                                  Prob > F        =     0.0003
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+           fies_dummy | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.3422384   .2460239    -1.39   0.166    -.8274322    .1429555
+                  sfi |   .4933555   .5219024     0.95   0.346    -.5359097    1.522621
+                  age |   .0059357    .005911     1.00   0.317    -.0057218    .0175931
+           basic_educ |  -.2437023   .2053089    -1.19   0.237    -.6486006    .1611959
+            male_head |  -.2924099   .2585064    -1.13   0.259    -.8022211    .2174013
+     dependency_ratio |   .2324628   .1146356     2.03   0.044     .0063853    .4585404
+  non_farm_enterprise |   .2568621   .3238715     0.79   0.429    -.3818582    .8955824
+         wealth_index |    -.32797   .1917681    -1.71   0.089    -.7061639    .0502238
+       soil_fertility |   -.390868   .2080585    -1.88   0.062    -.8011888    .0194527
+        drought_shock |   .6181264    .307829     2.01   0.046     .0110441    1.225209
+              married |  -.0807676   .2821846    -0.29   0.775    -.6372756    .4757404
+           total_land |    -.22472   .1024886    -2.19   0.030     -.426842   -.0225979
+         livestock_hh |  -.0783211    .422018    -0.19   0.853    -.9106003     .753958
+                      |
+                saq01 |
+           3. AMHARA  |   .3671804   .7331096     0.50   0.617    -1.078615    1.812976
+           4. OROMIA  |   1.517527   .7336032     2.07   0.040     .0707578    2.964296
+           5. SOMALI  |   .3414791   .7743391     0.44   0.660    -1.185627    1.868585
+6. BENISHANGUL GUMUZ  |   .2678807   .8371061     0.32   0.749    -1.383011    1.918772
+             7. SNNP  |   1.329425   .7502448     1.77   0.078    -.1501638    2.809013
+         12. GAMBELA  |   .4679883   .7705866     0.61   0.544    -1.051717    1.987694
+           13. HARAR  |   .0357695   .7861639     0.05   0.964    -1.514657    1.586196
+       15. DIRE DAWA  |   .6877431   .7206037     0.95   0.341    -.7333891    2.108875
+                      |
+                _cons |   -.572991   .8219619    -0.70   0.487    -2.194016    1.048034
+---------------------------------------------------------------------------------------
+.     estimates store svy_fi_a
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(fies_dummy), predict()
+dy/dx wrt:  female_landowner sfi age basic_educ male_head dependency_ratio
+            non_farm_enterprise wealth_index soil_fertility drought_shock married
+            total_land livestock_hh 3.saq01 4.saq01 5.saq01 6.saq01 7.saq01 12.saq01
+            13.saq01 15.saq01
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.0734045   .0522235    -1.41   0.161    -.1763966    .0295875
+                  sfi |   .1058167   .1111834     0.95   0.342    -.1134527    .3250862
+                  age |   .0012731   .0012592     1.01   0.313    -.0012102    .0037564
+           basic_educ |  -.0522702   .0437225    -1.20   0.233     -.138497    .0339567
+            male_head |  -.0627172   .0553023    -1.13   0.258    -.1717811    .0463468
+     dependency_ratio |   .0498595   .0242339     2.06   0.041     .0020668    .0976522
+  non_farm_enterprise |   .0550927   .0693477     0.79   0.428    -.0816708    .1918562
+         wealth_index |  -.0703442   .0402697    -1.75   0.082    -.1497618    .0090733
+       soil_fertility |  -.0838348   .0436127    -1.92   0.056    -.1698452    .0021756
+        drought_shock |    .132578   .0646789     2.05   0.042     .0050221     .260134
+              married |  -.0173233   .0604313    -0.29   0.775    -.1365024    .1018557
+           total_land |  -.0481988   .0213869    -2.25   0.025    -.0903768   -.0060207
+         livestock_hh |  -.0167986   .0905526    -0.19   0.853    -.1953811    .1617839
+                      |
+                saq01 |
+           3. AMHARA  |   .0619209   .1152627     0.54   0.592    -.1653934    .2892352
+           4. OROMIA  |    .307137   .1200037     2.56   0.011     .0704728    .5438012
+           5. SOMALI  |   .0572497   .1284237     0.45   0.656    -.1960199    .3105194
+6. BENISHANGUL GUMUZ  |   .0441468   .1345974     0.33   0.743    -.2212984    .3095919
+             7. SNNP  |   .2642637   .1237338     2.14   0.034     .0202432    .5082843
+         12. GAMBELA  |   .0807059   .1271634     0.63   0.526    -.1700782      .33149
+           13. HARAR  |   .0055663   .1217482     0.05   0.964    -.2345383     .245671
+       15. DIRE DAWA  |   .1240542   .1188919     1.04   0.298    -.1104173    .3585258
+---------------------------------------------------------------------------------------
+Note: dy/dx for factor levels is the discrete change from the base level.
+.     display as text _n "6d. Survey logit, moderate/severe FI, Spec B"
+
+6d. Survey logit, moderate/severe FI, Spec B
+.     svy: logit fies_dummy sole_female_ownership joint_ownership $x_paper i.saq01
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(22, 175)      =       2.53
+                                                  Prob > F        =     0.0004
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+           fies_dummy | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.3234881   .4205433    -0.77   0.443    -1.152859    .5058827
+      joint_ownership |  -.3450435   .2491232    -1.39   0.168    -.8363495    .1462625
+                  sfi |   .4936292   .5212666     0.95   0.345     -.534382    1.521641
+                  age |   .0059418   .0059124     1.00   0.316    -.0057184    .0176019
+           basic_educ |  -.2432853   .2057496    -1.18   0.238    -.6490525     .162482
+            male_head |  -.2793938   .3376071    -0.83   0.409    -.9452027    .3864152
+     dependency_ratio |   .2325312   .1145158     2.03   0.044     .0066898    .4583725
+  non_farm_enterprise |   .2561346   .3225774     0.79   0.428    -.3800336    .8923028
+         wealth_index |  -.3278628   .1919176    -1.71   0.089    -.7063514    .0506258
+       soil_fertility |   -.391237   .2088864    -1.87   0.063    -.8031906    .0207165
+        drought_shock |   .6183492   .3081805     2.01   0.046     .0105736    1.226125
+              married |  -.0792615   .2818851    -0.28   0.779    -.6351787    .4766557
+           total_land |   -.224498   .1035735    -2.17   0.031    -.4287595   -.0202365
+         livestock_hh |  -.0814516   .4248752    -0.19   0.848    -.9193654    .7564622
+                      |
+                saq01 |
+           3. AMHARA  |   .3665036   .7325604     0.50   0.617    -1.078209    1.811216
+           4. OROMIA  |   1.516539   .7330578     2.07   0.040     .0708451    2.962232
+           5. SOMALI  |   .3412249   .7745979     0.44   0.660    -1.186392    1.868841
+6. BENISHANGUL GUMUZ  |   .2667509   .8360397     0.32   0.750    -1.382037    1.915539
+             7. SNNP  |   1.328888   .7493422     1.77   0.078    -.1489203    2.806697
+         12. GAMBELA  |    .468994   .7721111     0.61   0.544    -1.053718    1.991706
+           13. HARAR  |   .0356121   .7860547     0.05   0.964    -1.514599    1.585823
+       15. DIRE DAWA  |   .6870623    .719987     0.95   0.341    -.7328537    2.106978
+                      |
+                _cons |  -.5825094   .8291081    -0.70   0.483    -2.217628    1.052609
+---------------------------------------------------------------------------------------
+.     estimates store svy_fi_b
+.     test sole_female_ownership = joint_ownership
+
+Adjusted Wald test
+
+ ( 1)  [fies_dummy]sole_female_ownership - [fies_dummy]joint_ownership = 0
+
+       F(  1,   196) =    0.00
+            Prob > F =    0.9551
+.     lincom sole_female_ownership - joint_ownership
+
+ ( 1)  [fies_dummy]sole_female_ownership - [fies_dummy]joint_ownership = 0
+
+------------------------------------------------------------------------------
+  fies_dummy | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   .0215554   .3823779     0.06   0.955    -.7325478    .7756586
+------------------------------------------------------------------------------
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(fies_dummy), predict()
+dy/dx wrt:  sole_female_ownership joint_ownership sfi age basic_educ male_head
+            dependency_ratio non_farm_enterprise wealth_index soil_fertility
+            drought_shock married total_land livestock_hh 3.saq01 4.saq01 5.saq01
+            6.saq01 7.saq01 12.saq01 13.saq01 15.saq01
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |   -.069382     .08984    -0.77   0.441    -.2465592    .1077953
+      joint_ownership |  -.0740052   .0529084    -1.40   0.163     -.178348    .0303376
+                  sfi |    .105874   .1110518     0.95   0.342    -.1131359    .3248838
+                  age |   .0012744   .0012595     1.01   0.313    -.0012095    .0037583
+           basic_educ |    -.05218   .0438165    -1.19   0.235    -.1385924    .0342324
+            male_head |  -.0599246   .0722614    -0.83   0.408    -.2024343    .0825852
+     dependency_ratio |   .0498735   .0242091     2.06   0.041     .0021298    .0976171
+  non_farm_enterprise |   .0549359   .0690647     0.80   0.427    -.0812694    .1911412
+         wealth_index |  -.0703203   .0403038    -1.74   0.083    -.1498051    .0091646
+       soil_fertility |  -.0839128   .0437929    -1.92   0.057    -.1702786    .0024529
+        drought_shock |    .132624   .0647523     2.05   0.042     .0049233    .2603247
+              married |  -.0170001   .0603656    -0.28   0.779    -.1360495    .1020493
+           total_land |  -.0481505   .0216291    -2.23   0.027    -.0908061   -.0054949
+         livestock_hh |  -.0174698   .0911676    -0.19   0.848    -.1972652    .1623256
+                      |
+                saq01 |
+           3. AMHARA  |   .0618237   .1152319     0.54   0.592    -.1654299    .2890774
+           4. OROMIA  |   .3069803   .1199734     2.56   0.011     .0703757    .5435848
+           5. SOMALI  |   .0572285   .1285274     0.45   0.657    -.1962458    .3107028
+6. BENISHANGUL GUMUZ  |   .0439682   .1344634     0.33   0.744    -.2212126    .3091491
+             7. SNNP  |   .2642102   .1236731     2.14   0.034     .0203093    .5081111
+         12. GAMBELA  |   .0809304   .1275743     0.63   0.527    -.1706642     .332525
+           13. HARAR  |   .0055442   .1217883     0.05   0.964    -.2346394    .2457279
+       15. DIRE DAWA  |   .1239622   .1188247     1.04   0.298    -.1103769    .3583012
+---------------------------------------------------------------------------------------
+Note: dy/dx for factor levels is the discrete change from the base level.
+.         
+.     * Severe FI
+.     display as text _n "6e. Survey logit, severe FI, Spec A"
+
+6e. Survey logit, severe FI, Spec A
+.     svy: logit severe_fi female_landowner $x_paper i.saq01
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(21, 176)      =       4.03
+                                                  Prob > F        =     0.0000
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+            severe_fi | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.4663645    .281474    -1.66   0.099    -1.021471    .0887421
+                  sfi |  -.1154848   .6980207    -0.17   0.869     -1.49208    1.261111
+                  age |    .014701   .0081688     1.80   0.073    -.0014091    .0308111
+           basic_educ |   .0115342    .268228     0.04   0.966    -.5174493    .5405178
+            male_head |  -.8023389   .3945634    -2.03   0.043    -1.580474   -.0242042
+     dependency_ratio |   .2521728    .117924     2.14   0.034       .01961    .4847355
+  non_farm_enterprise |   1.342778   .3147415     4.27   0.000     .7220633    1.963493
+         wealth_index |  -.4454198    .234812    -1.90   0.059    -.9085022    .0176625
+       soil_fertility |  -.0717376   .2678886    -0.27   0.789    -.6000518    .4565765
+        drought_shock |   1.098412   .3958101     2.78   0.006     .3178187    1.879005
+              married |    .010431   .3914935     0.03   0.979    -.7616494    .7825115
+           total_land |  -.1707656   .1554281    -1.10   0.273    -.4772918    .1357605
+         livestock_hh |  -1.074544   .5265905    -2.04   0.043    -2.113055    -.036033
+                      |
+                saq01 |
+           3. AMHARA  |   .3955599   1.096413     0.36   0.719    -1.766721    2.557841
+           4. OROMIA  |   2.401764   1.070975     2.24   0.026     .2896499    4.513878
+           5. SOMALI  |  -.2145829   1.087392    -0.20   0.844    -2.359073    1.929907
+6. BENISHANGUL GUMUZ  |    .197844   1.221794     0.16   0.872    -2.211706    2.607395
+             7. SNNP  |   1.892829   1.106024     1.71   0.089    -.2884071    4.074064
+         12. GAMBELA  |   -2.46557   1.290626    -1.91   0.058    -5.010868    .0797271
+           13. HARAR  |   .5443224   1.199186     0.45   0.650    -1.820643    2.909287
+       15. DIRE DAWA  |   .1262198   1.360394     0.09   0.926     -2.55667     2.80911
+                      |
+                _cons |  -2.595015   1.198935    -2.16   0.032    -4.959485    -.230545
+---------------------------------------------------------------------------------------
+.     estimates store svy_sev_a
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(severe_fi), predict()
+dy/dx wrt:  female_landowner sfi age basic_educ male_head dependency_ratio
+            non_farm_enterprise wealth_index soil_fertility drought_shock married
+            total_land livestock_hh 3.saq01 4.saq01 5.saq01 6.saq01 7.saq01 12.saq01
+            13.saq01 15.saq01
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.0554383   .0340191    -1.63   0.105    -.1225288    .0116523
+                  sfi |  -.0137281    .082924    -0.17   0.869    -.1772659    .1498098
+                  age |   .0017476   .0009992     1.75   0.082     -.000223    .0037182
+           basic_educ |   .0013711   .0319048     0.04   0.966    -.0615496    .0642918
+            male_head |  -.0953766   .0491935    -1.94   0.054    -.1923932    .0016399
+     dependency_ratio |   .0299766    .013962     2.15   0.033     .0024415    .0575117
+  non_farm_enterprise |   .1596204   .0358577     4.45   0.000     .0889039    .2303369
+         wealth_index |  -.0529485   .0282762    -1.87   0.063    -.1087132    .0028162
+       soil_fertility |  -.0085277   .0317775    -0.27   0.789    -.0711973    .0541419
+        drought_shock |   .1305718   .0457704     2.85   0.005     .0403062    .2208375
+              married |     .00124   .0465655     0.03   0.979    -.0905938    .0930738
+           total_land |  -.0202995   .0185212    -1.10   0.274     -.056826     .016227
+         livestock_hh |  -.1277345   .0642311    -1.99   0.048    -.2544073   -.0010618
+                      |
+                saq01 |
+           3. AMHARA  |   .0159427   .0402197     0.40   0.692    -.0633763    .0952617
+           4. OROMIA  |   .2083978   .0519514     4.01   0.000     .1059422    .3108533
+           5. SOMALI  |   -.006774   .0358283    -0.19   0.850    -.0774324    .0638844
+6. BENISHANGUL GUMUZ  |   .0073632   .0443381     0.17   0.868    -.0800778    .0948041
+             7. SNNP  |    .137398   .0524577     2.62   0.010      .033944    .2408521
+         12. GAMBELA  |  -.0352115   .0338555    -1.04   0.300    -.1019793    .0315562
+           13. HARAR  |   .0232967   .0483755     0.48   0.631    -.0721067    .1187001
+       15. DIRE DAWA  |   .0045643    .049268     0.09   0.926    -.0925991    .1017277
+---------------------------------------------------------------------------------------
+Note: dy/dx for factor levels is the discrete change from the base level.
+.     display as text _n "6f. Survey logit, severe FI, Spec B"
+
+6f. Survey logit, severe FI, Spec B
+.     svy: logit severe_fi sole_female_ownership joint_ownership $x_paper i.saq01
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(22, 175)      =       3.90
+                                                  Prob > F        =     0.0000
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+            severe_fi | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |   .0645302   .4111481     0.16   0.875    -.7463119    .8753722
+      joint_ownership |  -.5914649   .3116122    -1.90   0.059    -1.206008    .0230784
+                  sfi |  -.1137128   .6988555    -0.16   0.871    -1.491955    1.264529
+                  age |   .0146525    .008337     1.76   0.080    -.0017894    .0310943
+           basic_educ |   .0335886   .2753512     0.12   0.903     -.509443    .5766201
+            male_head |  -.4488765   .3812019    -1.18   0.240     -1.20066    .3029074
+     dependency_ratio |   .2568507   .1180646     2.18   0.031     .0240107    .4896908
+  non_farm_enterprise |   1.312385   .3156799     4.16   0.000     .6898195     1.93495
+         wealth_index |  -.4528912   .2345537    -1.93   0.055    -.9154641    .0096818
+       soil_fertility |  -.0928446   .2729535    -0.34   0.734    -.6311473    .4454582
+        drought_shock |   1.123317   .4006317     2.80   0.006     .3332144    1.913419
+              married |   .0611298    .399882     0.15   0.879    -.7274938    .8497535
+           total_land |  -.1581468   .1628167    -0.97   0.333    -.4792443    .1629506
+         livestock_hh |  -1.188942   .5286139    -2.25   0.026    -2.231444   -.1464411
+                      |
+                saq01 |
+           3. AMHARA  |   .4288376   1.067381     0.40   0.688    -1.676189    2.533864
+           4. OROMIA  |   2.419568   1.035827     2.34   0.021     .3767719    4.462365
+           5. SOMALI  |  -.2220482   1.068181    -0.21   0.836    -2.328653    1.884556
+6. BENISHANGUL GUMUZ  |   .2245227   1.194824     0.19   0.851     -2.13184    2.580885
+             7. SNNP  |   1.930388   1.077321     1.79   0.075    -.1942416    4.055017
+         12. GAMBELA  |  -2.395448   1.266302    -1.89   0.060    -4.892773    .1018777
+           13. HARAR  |   .5986557   1.174749     0.51   0.611    -1.718115    2.915427
+       15. DIRE DAWA  |   .1211205   1.326887     0.09   0.927    -2.495687    2.737928
+                      |
+                _cons |  -2.850943   1.164837    -2.45   0.015    -5.148165   -.5537205
+---------------------------------------------------------------------------------------
+.     estimates store svy_sev_b
+.     test sole_female_ownership = joint_ownership
+
+Adjusted Wald test
+
+ ( 1)  [severe_fi]sole_female_ownership - [severe_fi]joint_ownership = 0
+
+       F(  1,   196) =    2.22
+            Prob > F =    0.1383
+.     lincom sole_female_ownership - joint_ownership
+
+ ( 1)  [severe_fi]sole_female_ownership - [severe_fi]joint_ownership = 0
+
+------------------------------------------------------------------------------
+   severe_fi | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   .6559951   .4407459     1.49   0.138     -.213218    1.525208
+------------------------------------------------------------------------------
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(severe_fi), predict()
+dy/dx wrt:  sole_female_ownership joint_ownership sfi age basic_educ male_head
+            dependency_ratio non_farm_enterprise wealth_index soil_fertility
+            drought_shock married total_land livestock_hh 3.saq01 4.saq01 5.saq01
+            6.saq01 7.saq01 12.saq01 13.saq01 15.saq01
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |    .007644   .0487324     0.16   0.876    -.0884632    .1037511
+      joint_ownership |  -.0700624    .037606    -1.86   0.064    -.1442267    .0041018
+                  sfi |  -.0134699   .0827714    -0.16   0.871    -.1767068    .1497669
+                  age |   .0017357   .0010133     1.71   0.088    -.0002628    .0037341
+           basic_educ |   .0039788    .032665     0.12   0.903    -.0604412    .0683987
+            male_head |   -.053172   .0459207    -1.16   0.248    -.1437341    .0373901
+     dependency_ratio |   .0304255   .0139657     2.18   0.031     .0028831    .0579678
+  non_farm_enterprise |   .1554596    .035756     4.35   0.000     .0849437    .2259754
+         wealth_index |  -.0536476     .02824    -1.90   0.059    -.1093409    .0020458
+       soil_fertility |   -.010998    .032225    -0.34   0.733    -.0745501    .0525542
+        drought_shock |   .1330634   .0462281     2.88   0.004     .0418949    .2242318
+              married |   .0072412   .0475082     0.15   0.879    -.0864517    .1009341
+           total_land |  -.0187334   .0193067    -0.97   0.333     -.056809    .0193422
+         livestock_hh |  -.1408371   .0643232    -2.19   0.030    -.2676915   -.0139827
+                      |
+                saq01 |
+           3. AMHARA  |   .0172621   .0389915     0.44   0.658    -.0596346    .0941588
+           4. OROMIA  |   .2076998   .0502692     4.13   0.000     .1085618    .3068377
+           5. SOMALI  |  -.0068901   .0344931    -0.20   0.842    -.0749153    .0611351
+6. BENISHANGUL GUMUZ  |   .0083246   .0431903     0.19   0.847    -.0768528    .0935019
+             7. SNNP  |   .1397514   .0515872     2.71   0.007     .0380142    .2414886
+         12. GAMBELA  |  -.0344322   .0321948    -1.07   0.286    -.0979249    .0290604
+           13. HARAR  |   .0258039   .0480838     0.54   0.592    -.0690242     .120632
+       15. DIRE DAWA  |   .0043083   .0473185     0.09   0.928    -.0890106    .0976271
+---------------------------------------------------------------------------------------
+Note: dy/dx for factor levels is the discrete change from the base level.
+. 
+.     * Ownership only. Do not use keep(*.saq01); that pattern can error.
+.     display as text _n "Previous (robust) vs new (survey): ownership coefficients"
+
+Previous (robust) vs new (survey): ownership coefficients
+.     estimates table pap_ols_a svy_ols_a, keep(female_landowner) star stats(N)
+
+----------------------------------------------
+    Variable |   pap_ols_a       svy_ols_a    
+-------------+--------------------------------
+female_lan~r | -.24489364      -.48843236     
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     estimates table pap_ols_b svy_ols_b, keep(sole_female_ownership joint_ownership) st
+> ar stats(N)
+
+----------------------------------------------
+    Variable |   pap_ols_b       svy_ols_b    
+-------------+--------------------------------
+sole_femal~p | -.01203283      -.31007764     
+joint_owne~p | -.30335587*     -.51616658     
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     estimates table pap_fi_a svy_fi_a, keep(female_landowner) star stats(N)
+
+----------------------------------------------
+    Variable |   pap_fi_a        svy_fi_a     
+-------------+--------------------------------
+female_lan~r | -.26434391*     -.34223836     
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     estimates table pap_fi_b svy_fi_b, keep(sole_female_ownership joint_ownership) star
+>  stats(N)
+
+----------------------------------------------
+    Variable |   pap_fi_b        svy_fi_b     
+-------------+--------------------------------
+sole_femal~p | -.05359464       -.3234881     
+joint_owne~p | -.32191335*     -.34504351     
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     estimates table pap_sev_a svy_sev_a, keep(female_landowner) star stats(N)
+
+----------------------------------------------
+    Variable |   pap_sev_a       svy_sev_a    
+-------------+--------------------------------
+female_lan~r | -.39883399*     -.46636446     
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     estimates table pap_sev_b svy_sev_b, keep(sole_female_ownership joint_ownership) st
+> ar stats(N)
+
+----------------------------------------------
+    Variable |   pap_sev_b       svy_sev_b    
+-------------+--------------------------------
+sole_femal~p | -.06492457       .06453018     
+joint_owne~p | -.52385374*     -.59146489     
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     restore
+. }
+
+. 
+. 
+. ********************************************************************************
+. * STEP 7.  Key ownership numbers (coefficient and standard error)
+. *
+. * Look at the full logit output above for p-values and average marginal effects.
+. * Compact-table stars use  * p<0.05  ** p<0.01  *** p<0.001
+. * The paper tables use     * p<0.10  ** p<0.05  *** p<0.01
+. ********************************************************************************
+. 
+. display as text _n "===== STEP 7. Key ownership results  N = " _N " ====="
+
+===== STEP 7. Key ownership results  N = 1826 =====
+
+. 
+. foreach est in pap_ols_a pap_fi_a pap_sev_a {
+  2.     quietly estimates restore `est'
+  3.     display as text "`est'  any female: " %7.3f _b[female_landowner] ///
+>         " (" %6.3f _se[female_landowner] ")"
+  4. }
+pap_ols_a  any female:  -0.245 ( 0.130)
+pap_fi_a  any female:  -0.264 ( 0.122)
+pap_sev_a  any female:  -0.399 ( 0.187)
+
+. foreach est in pap_ols_b pap_fi_b pap_sev_b {
+  2.     quietly estimates restore `est'
+  3.     display as text "`est'  sole: " %7.3f _b[sole_female_ownership] ///
+>         " (" %6.3f _se[sole_female_ownership] ")" ///
+>         "   joint: " %7.3f _b[joint_ownership] ///
+>         " (" %6.3f _se[joint_ownership] ")"
+  4. }
+pap_ols_b  sole:  -0.012 ( 0.260)   joint:  -0.303 ( 0.135)
+pap_fi_b  sole:  -0.054 ( 0.226)   joint:  -0.322 ( 0.131)
+pap_sev_b  sole:  -0.065 ( 0.288)   joint:  -0.524 ( 0.214)
+
+. if "$wt" != "" {
+.     foreach est in svy_ols_a svy_fi_a svy_sev_a {
+  2.         quietly estimates restore `est'
+  3.         display as text "`est'  any female: " %7.3f _b[female_landowner] ///
+>             " (" %6.3f _se[female_landowner] ")"
+  4.     }
+svy_ols_a  any female:  -0.488 ( 0.297)
+svy_fi_a  any female:  -0.342 ( 0.246)
+svy_sev_a  any female:  -0.466 ( 0.281)
+.     foreach est in svy_ols_b svy_fi_b svy_sev_b {
+  2.         quietly estimates restore `est'
+  3.         display as text "`est'  sole: " %7.3f _b[sole_female_ownership] ///
+>             " (" %6.3f _se[sole_female_ownership] ")" ///
+>             "   joint: " %7.3f _b[joint_ownership] ///
+>             " (" %6.3f _se[joint_ownership] ")"
+  4.     }
+svy_ols_b  sole:  -0.310 ( 0.479)   joint:  -0.516 ( 0.303)
+svy_fi_b  sole:  -0.323 ( 0.421)   joint:  -0.345 ( 0.249)
+svy_sev_b  sole:   0.065 ( 0.411)   joint:  -0.591 ( 0.312)
+. }
+
+. 
+. 
+. 
+. 
+. /////////////////////////////////////////////////////////////////////////
+> /* 
+> Test for new models
+> */
+. 
+. ssc install outreg2
+checking outreg2 consistency and verifying not already installed...
+all files already exist and are up to date.
+
+. global x_paper sfi age basic_educ male_head dependency_ratio ///
+>      non_farm_enterprise wealth_index soil_fertility drought_shock married total_land l
+> ivestock_hh
+
+.         
+. display as text _n "===== STEP 6. New models: survey weight + EA cluster ====="
+
+===== STEP 6. New models: survey weight + EA cluster =====
+
+. 
+. if "$wt" == "" {
+.     display as text "No weight variable. Skipping survey models."
+. }
+
+. else {
+.     quietly count if missing($wt) | missing(psu)
+.     display as text "Households missing weight or PSU: " r(N)
+Households missing weight or PSU: 0
+. 
+.     preserve
+.     drop if missing($wt, psu)
+(0 observations deleted)
+.     svyset psu [pweight=$wt], singleunit(centered)
+
+Sampling weights: pw_w5
+             VCE: linearized
+     Single unit: centered
+        Strata 1: <one>
+ Sampling unit 1: psu
+           FPC 1: <zero>
+.     display as text "Survey N = " _N "   weight = $wt"
+Survey N = 1826   weight = pw_w5
+. 
+.     * OLS on FIES score
+.     display as text _n "6a. Survey OLS, FIES score, Spec A"
+
+6a. Survey OLS, FIES score, Spec A
+.     svy: regress fies_score female_landowner $x_paper i.saq01
+(running regress on estimation sample)
+
+Survey: Linear regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(21, 176)      =       4.95
+                                                  Prob > F        =     0.0000
+                                                  R-squared       =     0.1926
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+           fies_score | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+     female_landowner |  -.4884324   .2973048    -1.64   0.102    -1.074759    .0978947
+                  sfi |   .5465876   .6521892     0.84   0.403    -.7396216    1.832797
+                  age |   .0076423   .0071401     1.07   0.286    -.0064389    .0217236
+           basic_educ |  -.2665126   .2339576    -1.14   0.256      -.72791    .1948848
+            male_head |  -.4212857   .3366312    -1.25   0.212     -1.08517    .2425986
+     dependency_ratio |   .3423012   .1326749     2.58   0.011     .0806476    .6039547
+  non_farm_enterprise |   .5427209   .4698653     1.16   0.249    -.3839198    1.469362
+         wealth_index |  -.5465603   .1502065    -3.64   0.000    -.8427888   -.2503318
+       soil_fertility |  -.4334155   .2609128    -1.66   0.098    -.9479724    .0811415
+        drought_shock |   1.150441   .4252677     2.71   0.007     .3117527    1.989128
+              married |  -.0965475   .3582135    -0.27   0.788    -.8029952    .6099001
+           total_land |  -.2533857   .0862846    -2.94   0.004    -.4235512   -.0832203
+         livestock_hh |    -.67912   .5131285    -1.32   0.187    -1.691082    .3328419
+                      |
+                saq01 |
+           3. AMHARA  |   1.085403   .7499831     1.45   0.149    -.3936699    2.564475
+           4. OROMIA  |   2.775094   .7979213     3.48   0.001     1.201481    4.348708
+           5. SOMALI  |   .2856662    .947049     0.30   0.763    -1.582048    2.153381
+6. BENISHANGUL GUMUZ  |   1.679774   .7997326     2.10   0.037     .1025881    3.256959
+             7. SNNP  |   2.434501   .7993569     3.05   0.003     .8580566    4.010946
+         12. GAMBELA  |   1.504343   .7394509     2.03   0.043     .0460416    2.962645
+           13. HARAR  |   .6698812    .786056     0.85   0.395    -.8803323    2.220095
+       15. DIRE DAWA  |   1.452092   .7640229     1.90   0.059    -.0546687    2.958853
+                      |
+                _cons |   2.410397   .9229734     2.61   0.010     .5901629    4.230631
+---------------------------------------------------------------------------------------
+.     estimates store svy_ols_a
+.     display as text _n "6b. Survey OLS, FIES score, Spec B"
+
+6b. Survey OLS, FIES score, Spec B
+.     svy: regress fies_score sole_female_ownership joint_ownership $x_paper 
+(running regress on estimation sample)
+
+Survey: Linear regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(14, 183)      =       3.88
+                                                  Prob > F        =     0.0000
+                                                  R-squared       =     0.1262
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+           fies_score | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.4132853   .4773506    -0.87   0.388    -1.354688    .5281175
+      joint_ownership |  -.6984568   .3275835    -2.13   0.034    -1.344498   -.0524158
+                  sfi |    .865624   .6432892     1.35   0.180    -.4030332    2.134281
+                  age |   .0057169   .0076548     0.75   0.456    -.0093794    .0208132
+           basic_educ |  -.3043272   .2379845    -1.28   0.202    -.7736663    .1650118
+            male_head |  -.3943513    .393275    -1.00   0.317    -1.169945    .3812425
+     dependency_ratio |   .4042274   .1329034     3.04   0.003      .142123    .6663318
+  non_farm_enterprise |   .5328637   .5196925     1.03   0.306    -.4920432    1.557771
+         wealth_index |  -.3355951   .1432741    -2.34   0.020    -.6181519   -.0530383
+       soil_fertility |  -.5229334   .2899672    -1.80   0.073     -1.09479    .0489229
+        drought_shock |   1.293444   .4038367     3.20   0.002     .4970207    2.089867
+              married |  -.0483121   .3990777    -0.12   0.904    -.8353497    .7387255
+           total_land |  -.2969347   .0929693    -3.19   0.002    -.4802834    -.113586
+         livestock_hh |   .4658538    .544401     0.86   0.393    -.6077819    1.539489
+                _cons |   3.639949   .9152815     3.98   0.000     1.834885    5.445014
+---------------------------------------------------------------------------------------
+.     estimates store svy_ols_b
+.     test sole_female_ownership = joint_ownership
+
+Adjusted Wald test
+
+ ( 1)  sole_female_ownership - joint_ownership = 0
+
+       F(  1,   196) =    0.41
+            Prob > F =    0.5247
+.     lincom sole_female_ownership - joint_ownership
+
+ ( 1)  sole_female_ownership - joint_ownership = 0
+
+------------------------------------------------------------------------------
+  fies_score | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   .2851715    .447476     0.64   0.525    -.5973144    1.167657
+------------------------------------------------------------------------------
+. 
+.         
+.         * only for female landownership
+.         svy: logit fies_dummy female_landowner
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(1, 196)       =       2.69
+                                                  Prob > F        =     0.1024
+
+----------------------------------------------------------------------------------
+                 |             Linearized
+      fies_dummy | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+-----------------+----------------------------------------------------------------
+female_landowner |  -.3191643   .1944986    -1.64   0.102    -.7027431    .0644145
+           _cons |  -.0691346   .1854505    -0.37   0.710    -.4348692    .2966001
+----------------------------------------------------------------------------------
+.     estimates store svy_fi_a
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(fies_dummy), predict()
+dy/dx wrt:  female_landowner
+
+----------------------------------------------------------------------------------
+                 |            Delta-method
+                 |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+-----------------+----------------------------------------------------------------
+female_landowner |  -.0779923   .0471047    -1.66   0.099    -.1708894    .0149049
+----------------------------------------------------------------------------------
+.     display as text _n "6d. Survey logit, moderate/severe FI, Spec B"
+
+6d. Survey logit, moderate/severe FI, Spec B
+.     svy: logit fies_dummy sole_female_ownership joint_ownership 
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(2, 195)       =       2.64
+                                                  Prob > F        =     0.0738
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+           fies_dummy | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |   .0095216   .2353537     0.04   0.968    -.4546293    .4736724
+      joint_ownership |  -.4391097   .2149739    -2.04   0.042    -.8630687   -.0151508
+                _cons |  -.0691346   .1854505    -0.37   0.710    -.4348692    .2966001
+---------------------------------------------------------------------------------------
+.     estimates store svy_fi_b
+.     test sole_female_ownership = joint_ownership
+
+Adjusted Wald test
+
+ ( 1)  [fies_dummy]sole_female_ownership - [fies_dummy]joint_ownership = 0
+
+       F(  1,   196) =    3.57
+            Prob > F =    0.0602
+.     lincom sole_female_ownership - joint_ownership
+
+ ( 1)  [fies_dummy]sole_female_ownership - [fies_dummy]joint_ownership = 0
+
+------------------------------------------------------------------------------
+  fies_dummy | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   .4486313   .2373705     1.89   0.060    -.0194968    .9167594
+------------------------------------------------------------------------------
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(fies_dummy), predict()
+dy/dx wrt:  sole_female_ownership joint_ownership
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |   .0023135   .0571873     0.04   0.968    -.1104678    .1150949
+      joint_ownership |  -.1066939   .0514269    -2.07   0.039     -.208115   -.0052728
+---------------------------------------------------------------------------------------
+.         
+.         
+.     * Moderate or severe FI
+.     display as text _n "6c. Survey logit, moderate/severe FI, Spec A"
+
+6c. Survey logit, moderate/severe FI, Spec A
+.     svy: logit fies_dummy female_landowner $x_paper 
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(13, 184)      =       2.28
+                                                  Prob > F        =     0.0083
+
+-------------------------------------------------------------------------------------
+                    |             Linearized
+         fies_dummy | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+--------------------+----------------------------------------------------------------
+   female_landowner |  -.4362226   .2442384    -1.79   0.076    -.9178953    .0454501
+                sfi |   .5660323   .4736183     1.20   0.233    -.3680098    1.500074
+                age |   .0049287   .0058198     0.85   0.398    -.0065488    .0164062
+         basic_educ |  -.2602511   .1970345    -1.32   0.188     -.648831    .1283288
+          male_head |  -.3766656   .2597682    -1.45   0.149    -.8889651    .1356339
+   dependency_ratio |   .2659548   .1099438     2.42   0.016       .04913    .4827795
+non_farm_enterprise |   .2625233   .3460408     0.76   0.449    -.4199181    .9449647
+       wealth_index |  -.1818398   .1717248    -1.06   0.291    -.5205053    .1568257
+     soil_fertility |  -.4210668   .2078123    -2.03   0.044    -.8309021   -.0112315
+      drought_shock |   .7391329   .2795553     2.64   0.009     .1878103    1.290455
+            married |  -.0254931   .2719306    -0.09   0.925    -.5617787    .5107924
+         total_land |  -.2444451   .1044986    -2.34   0.020    -.4505311   -.0383591
+       livestock_hh |   .5723254   .3918478     1.46   0.146    -.2004538    1.345105
+              _cons |   .1202776   .6612424     0.18   0.856    -1.183786    1.424341
+-------------------------------------------------------------------------------------
+.     estimates store svy_fi_a
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(fies_dummy), predict()
+dy/dx wrt:  female_landowner sfi age basic_educ male_head dependency_ratio
+            non_farm_enterprise wealth_index soil_fertility drought_shock married
+            total_land livestock_hh
+
+-------------------------------------------------------------------------------------
+                    |            Delta-method
+                    |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+--------------------+----------------------------------------------------------------
+   female_landowner |  -.0979183   .0546822    -1.79   0.075    -.2057593    .0099228
+                sfi |   .1270565   .1055567     1.20   0.230    -.0811163    .3352292
+                age |   .0011063      .0013     0.85   0.396    -.0014575    .0036702
+         basic_educ |  -.0584182   .0440292    -1.33   0.186    -.1452501    .0284137
+          male_head |  -.0845496   .0580992    -1.46   0.147    -.1991294    .0300302
+   dependency_ratio |   .0596985   .0242749     2.46   0.015     .0118249    .1075721
+non_farm_enterprise |   .0589282   .0774598     0.76   0.448    -.0938333    .2116898
+       wealth_index |  -.0408173   .0380574    -1.07   0.285    -.1158719    .0342373
+     soil_fertility |  -.0945163   .0455346    -2.08   0.039     -.184317   -.0047156
+      drought_shock |   .1659121   .0596658     2.78   0.006     .0482428    .2835815
+            married |  -.0057224   .0610246    -0.09   0.925    -.1260715    .1146267
+         total_land |  -.0548703   .0226211    -2.43   0.016    -.0994824   -.0102582
+       livestock_hh |   .1284691     .08749     1.47   0.144    -.0440735    .3010116
+-------------------------------------------------------------------------------------
+.         outreg2 using FI_margins_noregion_svy.doc, replace ctitle (specA) ///
+>         dec(3)
+FI_margins_noregion_svy.doc
+dir : seeout
+.         
+.     display as text _n "6d. Survey logit, moderate/severe FI, Spec B"
+
+6d. Survey logit, moderate/severe FI, Spec B
+.     svy: logit fies_dummy sole_female_ownership joint_ownership $x_paper 
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(14, 183)      =       2.12
+                                                  Prob > F        =     0.0125
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+           fies_dummy | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.3699699   .3873261    -0.96   0.341    -1.133832    .3938919
+      joint_ownership |  -.4463885   .2503533    -1.78   0.076    -.9401206    .0473436
+                  sfi |   .5677821   .4729145     1.20   0.231     -.364872    1.500436
+                  age |   .0049599   .0058361     0.85   0.396    -.0065497    .0164695
+           basic_educ |  -.2590597   .1975777    -1.31   0.191    -.6487108    .1305913
+            male_head |  -.3306847   .3168262    -1.04   0.298    -.9555107    .2941413
+     dependency_ratio |   .2662055   .1097019     2.43   0.016     .0498579     .482553
+  non_farm_enterprise |   .2600254   .3449139     0.75   0.452    -.4201934    .9402443
+         wealth_index |  -.1816876   .1716443    -1.06   0.291    -.5201945    .1568192
+       soil_fertility |  -.4222684   .2086536    -2.02   0.044    -.8337627   -.0107741
+        drought_shock |   .7402227   .2794585     2.65   0.009     .1890912    1.291354
+              married |  -.0192899   .2734972    -0.07   0.944    -.5586651    .5200853
+           total_land |  -.2438693    .105191    -2.32   0.021    -.4513209   -.0364178
+         livestock_hh |   .5599229   .3946753     1.42   0.158    -.2184325    1.338278
+                _cons |   .0835944   .6590245     0.13   0.899    -1.216095    1.383284
+---------------------------------------------------------------------------------------
+.     estimates store svy_fi_b
+.     test sole_female_ownership = joint_ownership
+
+Adjusted Wald test
+
+ ( 1)  [fies_dummy]sole_female_ownership - [fies_dummy]joint_ownership = 0
+
+       F(  1,   196) =    0.05
+            Prob > F =    0.8318
+.     lincom sole_female_ownership - joint_ownership
+
+ ( 1)  [fies_dummy]sole_female_ownership - [fies_dummy]joint_ownership = 0
+
+------------------------------------------------------------------------------
+  fies_dummy | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   .0764186   .3592185     0.21   0.832    -.6320109    .7848481
+------------------------------------------------------------------------------
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(fies_dummy), predict()
+dy/dx wrt:  sole_female_ownership joint_ownership sfi age basic_educ male_head
+            dependency_ratio non_farm_enterprise wealth_index soil_fertility
+            drought_shock married total_land livestock_hh
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |  -.0830404   .0868047    -0.96   0.340    -.2542315    .0881507
+      joint_ownership |  -.1001926   .0560668    -1.79   0.075    -.2107643    .0103791
+                  sfi |   .1274396   .1053973     1.21   0.228    -.0804187     .335298
+                  age |   .0011133   .0013035     0.85   0.394    -.0014575     .003684
+           basic_educ |  -.0581464   .0441517    -1.32   0.189    -.1452199    .0289271
+            male_head |  -.0742227   .0709171    -1.05   0.297    -.2140813    .0656358
+     dependency_ratio |   .0597503    .024223     2.47   0.014     .0119791    .1075214
+  non_farm_enterprise |   .0583631   .0771981     0.76   0.451    -.0938824    .2106087
+         wealth_index |  -.0407801   .0380387    -1.07   0.285    -.1157977    .0342375
+       soil_fertility |  -.0947788    .045713    -2.07   0.039    -.1849313   -.0046264
+        drought_shock |   .1661442   .0596362     2.79   0.006     .0485332    .2837552
+              married |  -.0043296   .0613749    -0.07   0.944    -.1253695    .1167102
+           total_land |  -.0547369   .0227892    -2.40   0.017    -.0996804   -.0097933
+         livestock_hh |   .1256756   .0881268     1.43   0.155    -.0481229    .2994741
+---------------------------------------------------------------------------------------
+.         outreg2 using FI_margins_noregion_svy.doc, append ctitle (specB) ///
+>         dec(3)
+FI_margins_noregion_svy.doc
+dir : seeout
+. 
+.     * Severe FI
+.     display as text _n "6e. Survey logit, severe FI, Spec A"
+
+6e. Survey logit, severe FI, Spec A
+.     svy: logit severe_fi female_landowner $x_paper 
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(13, 184)      =       4.41
+                                                  Prob > F        =     0.0000
+
+-------------------------------------------------------------------------------------
+                    |             Linearized
+          severe_fi | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+--------------------+----------------------------------------------------------------
+   female_landowner |  -.5291334   .2866382    -1.85   0.066    -1.094424    .0361577
+                sfi |    .085461   .6450592     0.13   0.895    -1.186687    1.357609
+                age |   .0095013   .0083186     1.14   0.255    -.0069042    .0259068
+         basic_educ |  -.0877854    .242363    -0.36   0.718    -.5657595    .3901887
+          male_head |  -.8092832   .3991998    -2.03   0.044    -1.596562   -.0220049
+   dependency_ratio |   .2502776   .1133271     2.21   0.028     .0267806    .4737747
+non_farm_enterprise |   1.254494   .3467251     3.62   0.000     .5707032    1.938285
+       wealth_index |  -.2235156    .199856    -1.12   0.265      -.61766    .1706287
+     soil_fertility |  -.1525789   .2893771    -0.53   0.599    -.7232714    .4181136
+      drought_shock |    1.14911   .3701339     3.10   0.002     .4191536    1.879066
+            married |  -.0584291   .4120811    -0.14   0.887    -.8711113    .7542531
+         total_land |  -.1650801   .1472955    -1.12   0.264    -.4555676    .1254074
+       livestock_hh |   .1502101    .447414     0.34   0.737    -.7321534    1.032574
+              _cons |   -1.38856   .9418614    -1.47   0.142    -3.246044    .4689239
+-------------------------------------------------------------------------------------
+.     estimates store svy_sev_a
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(severe_fi), predict()
+dy/dx wrt:  female_landowner sfi age basic_educ male_head dependency_ratio
+            non_farm_enterprise wealth_index soil_fertility drought_shock married
+            total_land livestock_hh
+
+-------------------------------------------------------------------------------------
+                    |            Delta-method
+                    |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+--------------------+----------------------------------------------------------------
+   female_landowner |  -.0670827   .0375056    -1.79   0.075    -.1410491    .0068836
+                sfi |   .0108346   .0817404     0.13   0.895    -.1503689    .1720382
+                age |   .0012046   .0010697     1.13   0.262     -.000905    .0033141
+         basic_educ |  -.0111293   .0306201    -0.36   0.717    -.0715165    .0492579
+          male_head |  -.1025997   .0528919    -1.94   0.054    -.2069101    .0017107
+   dependency_ratio |   .0317298   .0144373     2.20   0.029     .0032575    .0602022
+non_farm_enterprise |   .1590429   .0447935     3.55   0.000     .0707038    .2473819
+       wealth_index |   -.028337   .0254893    -1.11   0.268    -.0786055    .0219316
+     soil_fertility |  -.0193437   .0367672    -0.53   0.599    -.0918539    .0531664
+      drought_shock |   .1456824   .0454413     3.21   0.002     .0560657    .2352992
+            married |  -.0074075   .0521163    -0.14   0.887    -.1101883    .0953732
+         total_land |  -.0209286   .0186396    -1.12   0.263    -.0576885    .0158312
+       livestock_hh |   .0190434   .0567927     0.34   0.738    -.0929598    .1310467
+-------------------------------------------------------------------------------------
+.         outreg2 using SevFI_margins_noregion_svy.doc, replace ctitle (specA) ///
+>         dec(3)
+SevFI_margins_noregion_svy.doc
+dir : seeout
+.         
+.     display as text _n "6f. Survey logit, severe FI, Spec B"
+
+6f. Survey logit, severe FI, Spec B
+.     svy: logit severe_fi sole_female_ownership joint_ownership $x_paper 
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(14, 183)      =       4.19
+                                                  Prob > F        =     0.0000
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+            severe_fi | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |   .0176128   .3670717     0.05   0.962    -.7063045      .74153
+      joint_ownership |  -.6717787   .3249406    -2.07   0.040    -1.312607     -.03095
+                  sfi |   .1130179     .65303     0.17   0.863    -1.174849    1.400885
+                  age |   .0097512   .0085333     1.14   0.255    -.0070777      .02658
+           basic_educ |  -.0711856   .2480078    -0.29   0.774    -.5602919    .4179207
+            male_head |  -.4577222   .3463088    -1.32   0.188    -1.140692    .2252477
+     dependency_ratio |   .2521086   .1134916     2.22   0.027     .0282871      .47593
+  non_farm_enterprise |    1.23061   .3458852     3.56   0.000     .5484757    1.912745
+         wealth_index |  -.2284371   .1977708    -1.16   0.249     -.618469    .1615948
+       soil_fertility |  -.1727925   .2939731    -0.59   0.557    -.7525491     .406964
+        drought_shock |   1.175024   .3716755     3.16   0.002     .4420278    1.908021
+              married |   .0132219    .420405     0.03   0.975    -.8158761    .8423199
+           total_land |  -.1568913   .1549288    -1.01   0.312    -.4624328    .1486501
+         livestock_hh |   .0595011   .4654312     0.13   0.898    -.8583949    .9773971
+                _cons |  -1.677943   .9461172    -1.77   0.078     -3.54382    .1879332
+---------------------------------------------------------------------------------------
+.     estimates store svy_sev_b
+.     test sole_female_ownership = joint_ownership
+
+Adjusted Wald test
+
+ ( 1)  [severe_fi]sole_female_ownership - [severe_fi]joint_ownership = 0
+
+       F(  1,   196) =    2.93
+            Prob > F =    0.0884
+.     lincom sole_female_ownership - joint_ownership
+
+ ( 1)  [severe_fi]sole_female_ownership - [severe_fi]joint_ownership = 0
+
+------------------------------------------------------------------------------
+   severe_fi | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   .6893914   .4025422     1.71   0.088    -.1044787    1.483261
+------------------------------------------------------------------------------
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(severe_fi), predict()
+dy/dx wrt:  sole_female_ownership joint_ownership sfi age basic_educ male_head
+            dependency_ratio non_farm_enterprise wealth_index soil_fertility
+            drought_shock married total_land livestock_hh
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |   .0022258   .0463912     0.05   0.962    -.0892641    .0937158
+      joint_ownership |  -.0848967    .042477    -2.00   0.047    -.1686674    -.001126
+                  sfi |   .0142828   .0824381     0.17   0.863    -.1482969    .1768624
+                  age |   .0012323   .0010917     1.13   0.260    -.0009207    .0033853
+           basic_educ |  -.0089962   .0312736    -0.29   0.774    -.0706722    .0526799
+            male_head |  -.0578451   .0444785    -1.30   0.195     -.145563    .0298727
+     dependency_ratio |   .0318605   .0144738     2.20   0.029      .003316    .0604049
+  non_farm_enterprise |   .1555196   .0442206     3.52   0.001     .0683103    .2427289
+         wealth_index |   -.028869   .0252196    -1.14   0.254    -.0786055    .0208676
+       soil_fertility |  -.0218368   .0372014    -0.59   0.558    -.0952033    .0515297
+        drought_shock |   .1484949   .0456832     3.25   0.001     .0584011    .2385887
+              married |   .0016709   .0531545     0.03   0.975    -.1031572     .106499
+           total_land |  -.0198273   .0195221    -1.02   0.311    -.0583277    .0186731
+         livestock_hh |   .0075195   .0588404     0.13   0.898    -.1085221    .1235611
+---------------------------------------------------------------------------------------
+.         outreg2 using SevFI_margins_noregion_svy.doc, append ctitle (specA) ///
+>         dec(3)
+SevFI_margins_noregion_svy.doc
+dir : seeout
+.         
+.         
+.         * only for female landownership
+.     svy: logit severe_fi female_landowner 
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(1, 196)       =       2.59
+                                                  Prob > F        =     0.1093
+
+----------------------------------------------------------------------------------
+                 |             Linearized
+       severe_fi | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+-----------------+----------------------------------------------------------------
+female_landowner |  -.3920837   .2437231    -1.61   0.109      -.87274    .0885727
+           _cons |  -1.366506   .2275399    -6.01   0.000    -1.815247   -.9177652
+----------------------------------------------------------------------------------
+.     estimates store svy_sev_a
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(severe_fi), predict()
+dy/dx wrt:  female_landowner
+
+----------------------------------------------------------------------------------
+                 |            Delta-method
+                 |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+-----------------+----------------------------------------------------------------
+female_landowner |  -.0548816   .0350768    -1.56   0.119     -.124058    .0142948
+----------------------------------------------------------------------------------
+.         
+.     svy: logit severe_fi sole_female_ownership joint_ownership
+(running logit on estimation sample)
+
+Survey: Logistic regression
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+                                                  Design df       =        196
+                                                  F(2, 195)       =       6.74
+                                                  Prob > F        =     0.0015
+
+---------------------------------------------------------------------------------------
+                      |             Linearized
+            severe_fi | Coefficient  std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |   .3115164   .2767526     1.13   0.262    -.2342788    .8573116
+      joint_ownership |  -.7472878   .2911175    -2.57   0.011    -1.321413    -.173163
+                _cons |  -1.366506   .2275399    -6.01   0.000    -1.815247   -.9177652
+---------------------------------------------------------------------------------------
+.     estimates store svy_sev_b
+.     test sole_female_ownership = joint_ownership
+
+Adjusted Wald test
+
+ ( 1)  [severe_fi]sole_female_ownership - [severe_fi]joint_ownership = 0
+
+       F(  1,   196) =   13.07
+            Prob > F =    0.0004
+.     lincom sole_female_ownership - joint_ownership
+
+ ( 1)  [severe_fi]sole_female_ownership - [severe_fi]joint_ownership = 0
+
+------------------------------------------------------------------------------
+   severe_fi | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+         (1) |   1.058804   .2928385     3.62   0.000     .4812853    1.636323
+------------------------------------------------------------------------------
+.     margins, dydx(*)
+
+Average marginal effects
+
+Number of strata =   1                            Number of obs   =      1,826
+Number of PSUs   = 197                            Population size = 13,186,542
+Model VCE: Linearized                             Design df       =        196
+
+Expression: Pr(severe_fi), predict()
+dy/dx wrt:  sole_female_ownership joint_ownership
+
+---------------------------------------------------------------------------------------
+                      |            Delta-method
+                      |      dy/dx   std. err.      t    P>|t|     [95% conf. interval]
+----------------------+----------------------------------------------------------------
+sole_female_ownership |   .0427884   .0378566     1.13   0.260    -.0318701     .117447
+      joint_ownership |  -.1026439   .0418563    -2.45   0.015    -.1851905   -.0200973
+---------------------------------------------------------------------------------------
+. 
+.     * Ownership only. Do not use keep(*.saq01); that pattern can error.
+.     display as text _n "Previous (robust) vs new (survey): ownership coefficients"
+
+Previous (robust) vs new (survey): ownership coefficients
+.     estimates table pap_ols_a svy_ols_a, keep(female_landowner) star stats(N)
+
+----------------------------------------------
+    Variable |   pap_ols_a       svy_ols_a    
+-------------+--------------------------------
+female_lan~r | -.24489364      -.48843236     
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     estimates table pap_ols_b svy_ols_b, keep(sole_female_ownership joint_ownership) st
+> ar stats(N)
+
+----------------------------------------------
+    Variable |   pap_ols_b       svy_ols_b    
+-------------+--------------------------------
+sole_femal~p | -.01203283      -.41328531     
+joint_owne~p | -.30335587*     -.69845682*    
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     estimates table pap_fi_a svy_fi_a, keep(female_landowner) star stats(N)
+
+----------------------------------------------
+    Variable |   pap_fi_a        svy_fi_a     
+-------------+--------------------------------
+female_lan~r | -.26434391*     -.43622258     
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     estimates table pap_fi_b svy_fi_b, keep(sole_female_ownership joint_ownership) star
+>  stats(N)
+
+----------------------------------------------
+    Variable |   pap_fi_b        svy_fi_b     
+-------------+--------------------------------
+sole_femal~p | -.05359464      -.36996986     
+joint_owne~p | -.32191335*     -.44638846     
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     estimates table pap_sev_a svy_sev_a, star stats(N)
+
+----------------------------------------------
+    Variable |   pap_sev_a       svy_sev_a    
+-------------+--------------------------------
+female_lan~r | -.39883399*     -.39208369     
+         sfi | -.81282544*                    
+         age |  .00750939                     
+  basic_educ | -.05478026                     
+   male_head | -.43518242                     
+dependency~o |  .07803917                     
+non_farm_e~e |  .50952647                     
+wealth_index | -.61984642***                  
+soil_ferti~y |  .09839426                     
+drought_sh~k |  1.5136591***                  
+     married |  .12762943                     
+  total_land | -.36464938*                    
+livestock_hh | -.66470887*                    
+             |
+       saq01 |
+          3  |  .37345682                     
+          4  |  1.9614364***                  
+          5  | -.87999969*                    
+          6  |  .25012108                     
+          7  |  1.3408346**                   
+         12  | -1.1210798                     
+         13  | -.88537796                     
+         15  | -.46712969                     
+             |
+       _cons | -2.2875565***    -1.366506***  
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     estimates table pap_sev_b svy_sev_b, star stats(N)
+
+----------------------------------------------
+    Variable |   pap_sev_b       svy_sev_b    
+-------------+--------------------------------
+sole_femal~p | -.06492457        .3115164     
+joint_owne~p | -.52385374*     -.74728777*    
+         sfi | -.81398082*                    
+         age |  .00766133                     
+  basic_educ | -.04635849                     
+   male_head | -.24509728                     
+dependency~o |  .07400606                     
+non_farm_e~e |  .50541036                     
+wealth_index | -.62747926***                  
+soil_ferti~y |  .08976496                     
+drought_sh~k |  1.5214206***                  
+     married |   .1697176                     
+  total_land | -.34942027*                    
+livestock_hh | -.69513335*                    
+             |
+       saq01 |
+          3  |  .37374898                     
+          4  |  1.9639959***                  
+          5  | -.88575569*                    
+          6  |  .23968045                     
+          7  |  1.3519179**                   
+         12  | -1.0813994                     
+         13  | -.86402015                     
+         15  | -.47834769                     
+             |
+       _cons | -2.4560032***    -1.366506***  
+-------------+--------------------------------
+           N |       1826            1826     
+----------------------------------------------
+      Legend: * p<0.05; ** p<0.01; *** p<0.001
+.     restore
+. }
+
+. 
+. 
+. 
+. ///////////////////////////////////////////////////////////////
+> 
+. 
+. 
+. 
+. 
+. 
+. 
+. 
+. 
+. 
+. 
+. 
+. ////////////////////////////////////
+> ********************************************************************************
+. * STEP 7.  Key ownership numbers (coefficient and standard error)
+. *
+. * Look at the full logit output above for p-values and average marginal effects.
+. * Compact-table stars use  * p<0.05  ** p<0.01  *** p<0.001
+. * The paper tables use     * p<0.10  ** p<0.05  *** p<0.01
+. ********************************************************************************
+. 
+. display as text _n "===== STEP 7. Key ownership results  N = " _N " ====="
+
+===== STEP 7. Key ownership results  N = 1826 =====
+
+. 
+. foreach est in pap_ols_a pap_fi_a pap_sev_a {
+  2.     quietly estimates restore `est'
+  3.     display as text "`est'  any female: " %7.3f _b[female_landowner] ///
+>         " (" %6.3f _se[female_landowner] ")"
+  4. }
+pap_ols_a  any female:  -0.245 ( 0.130)
+pap_fi_a  any female:  -0.264 ( 0.122)
+pap_sev_a  any female:  -0.399 ( 0.187)
+
+. foreach est in pap_ols_b pap_fi_b pap_sev_b {
+  2.     quietly estimates restore `est'
+  3.     display as text "`est'  sole: " %7.3f _b[sole_female_ownership] ///
+>         " (" %6.3f _se[sole_female_ownership] ")" ///
+>         "   joint: " %7.3f _b[joint_ownership] ///
+>         " (" %6.3f _se[joint_ownership] ")"
+  4. }
+pap_ols_b  sole:  -0.012 ( 0.260)   joint:  -0.303 ( 0.135)
+pap_fi_b  sole:  -0.054 ( 0.226)   joint:  -0.322 ( 0.131)
+pap_sev_b  sole:  -0.065 ( 0.288)   joint:  -0.524 ( 0.214)
+
+. if "$wt" != "" {
+.     foreach est in svy_ols_a svy_fi_a svy_sev_a {
+  2.         quietly estimates restore `est'
+  3.         display as text "`est'  any female: " %7.3f _b[female_landowner] ///
+>             " (" %6.3f _se[female_landowner] ")"
+  4.     }
+svy_ols_a  any female:  -0.488 ( 0.297)
+svy_fi_a  any female:  -0.436 ( 0.244)
+svy_sev_a  any female:  -0.392 ( 0.244)
+.     foreach est in svy_ols_b svy_fi_b svy_sev_b {
+  2.         quietly estimates restore `est'
+  3.         display as text "`est'  sole: " %7.3f _b[sole_female_ownership] ///
+>             " (" %6.3f _se[sole_female_ownership] ")" ///
+>             "   joint: " %7.3f _b[joint_ownership] ///
+>             " (" %6.3f _se[joint_ownership] ")"
+  4.     }
+svy_ols_b  sole:  -0.413 ( 0.477)   joint:  -0.698 ( 0.328)
+svy_fi_b  sole:  -0.370 ( 0.387)   joint:  -0.446 ( 0.250)
+svy_sev_b  sole:   0.312 ( 0.277)   joint:  -0.747 ( 0.291)
+. }
+
+. 
+. 
+. 
+. 
+. 
+. 
+.  svyset psu [pweight=$wt], singleunit(centered)
+
+Sampling weights: pw_w5
+             VCE: linearized
+     Single unit: centered
+        Strata 1: <one>
+ Sampling unit 1: psu
+           FPC 1: <zero>
+
+. 
+. display as text _n "Done."
+
+Done.
+
+. display as text "Log:    paper_fies_1826_easyform.log"
+Log:    paper_fies_1826_easyform.log
+
+. display as text "Sample: paper_sample_1826.dta  (if the sample was rebuilt)"
+Sample: paper_sample_1826.dta  (if the sample was rebuilt)
+
+. display as text "Original do-file (unchanged): paper_fies_1826.do"
+Original do-file (unchanged): paper_fies_1826.do
+
+. log close
+      name:  <unnamed>
+       log:  C:\Users\nk11022\Desktop\paper analysis\paper analysis\ETH_2021_ESPS-W5_v01_
+> M_Stata_1\paper_fies_1826_easyform.log
+  log type:  text
+ closed on:  11 Sep 2026, 14:54:42
+-----------------------------------------------------------------------------------------
