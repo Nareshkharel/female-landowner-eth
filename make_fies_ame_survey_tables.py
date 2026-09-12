@@ -481,9 +481,15 @@ TABLES = [
 ]
 
 
-def write_docx(models: dict, out_path: Path | None = None, note: str | None = None) -> Path:
+def write_docx(
+    models: dict,
+    out_path: Path | None = None,
+    note: str | None = None,
+    tables: list | None = None,
+) -> Path:
     dest = Path(out_path) if out_path is not None else OUT_PATH
     foot = note if note is not None else NOTE
+    items = tables if tables is not None else TABLES
     with zipfile.ZipFile(TEMPLATE) as zin:
         xml = zin.read("word/document.xml")
         other = {name: zin.read(name) for name in zin.namelist() if name != "word/document.xml"}
@@ -495,7 +501,7 @@ def write_docx(models: dict, out_path: Path | None = None, note: str | None = No
     for child in list(body):
         body.remove(child)
 
-    for title, outcome, family, olabel in TABLES:
+    for title, outcome, family, olabel in items:
         body.append(make_title(title))
         body.append(build_table(models, outcome, family, olabel))
         body.append(make_note(foot))
