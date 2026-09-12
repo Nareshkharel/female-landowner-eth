@@ -1,0 +1,42 @@
+AIC / BIC for the N=1826 paper sample
+Survey weight: pw_w5 (normalized to sum to N for AIC/BIC)
+Cluster: household (does not change AIC/BIC; same likelihood as EA cluster)
+N = 1826
+sum(pw_w5) = 1.31865e+07
+sole=1: 248  joint=1: 668  any female=1: 916
+sole and joint overlap: 0   any != sole|joint: 0
+Spec A = female_landowner     Spec B = sole + joint
+AIC = -2*LL + 2k     BIC = -2*LL + k*ln(N)     k includes intercept
+
+===== Validation: unweighted +region LL vs Stata Step 5 =====
+  fies_dummy   any     LL=-1044.085160  Stata=-1044.085200  |d|=4.02e-05  OK  k=22
+  fies_dummy   decomp  LL=-1043.407397  Stata=-1043.407400  |d|=2.80e-06  OK  k=23
+  severe_fi    any     LL=-560.100961  Stata=-560.100960  |d|=6.85e-07  OK  k=22
+  severe_fi    decomp  LL=-559.038196  Stata=-559.038200  |d|=3.90e-06  OK  k=23
+Validation passed
+
+===== Validation: hh-cluster Wald sole=joint vs Stata svy +region =====
+  fies_dummy   sole-joint=0.021555 (Stata 0.021555)  Wald chi2=0.004 p=0.9524 (Stata p=0.9524)  OK
+  severe_fi    sole-joint=0.655995 (Stata 0.655995)  Wald chi2=2.090 p=0.1483 (Stata p=0.1484)  OK
+
+===== Moderate or severe FI (fies_dummy) =====
+spec                                        kA  kB       LL_A       LL_B      dLL      AIC_A      AIC_B     dAIC      BIC_A      BIC_B     dBIC  LR_chi2    LR_p  Wald_p   AIC pref   BIC pref
+Ownership only                               2   3  -1244.978  -1239.776    5.202    2493.96    2485.55     8.40    2504.98    2502.08     2.89   10.405   0.001   0.040 sole+joint sole+joint
+Survey + household controls, no region      14  15  -1167.234  -1167.176    0.058    2362.47    2364.35    -1.88    2439.61    2447.00    -7.39    0.115   0.734   0.822 female_own female_own
+Survey + household controls + region        22  23  -1126.198  -1126.194    0.004    2296.40    2298.39    -1.99    2417.61    2425.11    -7.50    0.009   0.926   0.952 female_own female_own
+
+===== Severe FI (severe_fi) =====
+spec                                        kA  kB       LL_A       LL_B      dLL      AIC_A      AIC_B     dAIC      BIC_A      BIC_B     dBIC  LR_chi2    LR_p  Wald_p   AIC pref   BIC pref
+Ownership only                               2   3   -825.982   -808.625   17.357    1655.96    1623.25    32.71    1666.98    1639.78    27.20   34.714   0.000   0.000 sole+joint sole+joint
+Survey + household controls, no region      14  15   -748.768   -745.368    3.400    1525.54    1520.74     4.80    1602.67    1603.38    -0.71    6.800   0.009   0.086 sole+joint female_own
+Survey + household controls + region        22  23   -695.727   -692.980    2.747    1435.45    1431.96     3.49    1556.67    1558.69    -2.02    5.494   0.019   0.148 sole+joint female_own
+
+Notes
+  dLL  = LL(sole+joint) - LL(female_landowner); always >= 0 if nested.
+  dAIC = AIC_A - AIC_B; positive means sole+joint has lower AIC.
+  dBIC = BIC_A - BIC_B; positive means sole+joint has lower BIC.
+  Rule of thumb: |dAIC|<2 essentially equivalent; >10 strong preference.
+  BIC penalizes the extra sole/joint parameter by ln(N) = 7.510.
+  LR tests H0: b_sole = b_joint (Spec A nested in Spec B); ignores clustering.
+  Wald_p is the household-cluster sandwich test of the same restriction.
+  Household clustering changes SEs/Wald, not AIC/BIC.
