@@ -1,0 +1,35 @@
+FIES status by region, paper sample N=1,826
+Food secure: FIES 0-3.  Moderate: 4-6.  Severe: 7-8.
+
+===== Unweighted (replicate uploaded table) =====
+Region           Secure  Moderate   Severe      N  match
+Afar              74.55      9.09    16.36     55  OK
+Amhara            74.62     20.08     5.30    264  OK
+Benishangul       76.00     20.00     4.00    100  OK
+Dire Dawa         66.41     27.34     6.25    128  OK
+Gambela           79.50     18.63     1.86    161  OK
+Harar             83.63     13.45     2.92    171  OK
+Oromia            49.46     28.53    22.01    368  OK
+SNNPR             50.72     30.68    18.60    414  OK
+Somali            53.94     26.67    19.39    165  OK
+All regions       63.03     24.21    12.76   1826
+Replication passed
+
+===== Survey-weighted (pw_w5) =====
+Region           Secure  Moderate   Severe      N  Wt share
+Afar              78.83     11.99     9.18     55     1.30%
+Amhara            76.58     19.86     3.56    264    20.61%
+Benishangul       77.92     18.94     3.14    100     1.58%
+Dire Dawa         60.79     34.12     5.09    128     0.33%
+Gambela           79.36     20.36     0.28    161     0.43%
+Harar             78.55     15.51     5.94    171     0.17%
+Oromia            49.70     27.48    22.82    368    47.51%
+SNNPR             49.73     31.87    18.40    414    24.64%
+Somali            54.37     27.00    18.63    165     3.43%
+All regions       56.44     26.61    16.94   1826   100.00%
+
+Notes
+  Categories match fies_dummy (FIES>=4) and severe_fi (FIES>6).
+  Weights rescale each region to its population share; they do not
+  balance household characteristics across regions.
+  Oromia + SNNPR are 42.8% of the sample but 72.2% of the weight.
